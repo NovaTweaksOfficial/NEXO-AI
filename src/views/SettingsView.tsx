@@ -59,7 +59,10 @@ export function SettingsView() {
 
   return (
     <div className="page">
-      <h2 style={{ margin: '0 0 12px', fontSize: 22, fontWeight: 700 }}>Settings</h2>
+      <h2 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700 }}>Settings</h2>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.4, color: 'var(--purple-2)', marginBottom: 12 }}>
+        MADE BY FL3SH
+      </div>
 
       {/* Account */}
       <div className="glass" style={{ padding: 14, marginBottom: 12 }}>
@@ -276,7 +279,12 @@ export function SettingsView() {
 
       <div className="glass" style={{ padding: 14 }}>
         <div style={{ fontWeight: 600, marginBottom: 4 }}>About NEXUS AI</div>
-        <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Version 1.0.0 · NEXUS Core engine.</div>
+        <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+          MADE BY FL3SH · Version 1.0.0 · NEXUS Core engine.
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 6 }}>
+          Created and owned solely by FL3SH (Cayden). No team — just one person behind NEXUS AI.
+        </div>
       </div>
     </div>
   )
