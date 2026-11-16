@@ -283,7 +283,7 @@ export function SettingsView() {
           MADE BY FL3SH · Version 1.0.0 · NEXUS Core engine.
         </div>
         <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 6 }}>
-          Created and owned solely by FL3SH (Cayden). No team — just one person behind NEXUS AI.
+          Created and owned solely by FL3SH (r00ster). No team — just one person behind NEXUS AI.
         </div>
       </div>
     </div>
