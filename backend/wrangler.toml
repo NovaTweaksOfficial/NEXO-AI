@@ -1,9 +1,23 @@
 name = "nexus-ai-backend"
 main = "src/index.ts"
-compatibility_date = "2024-11-01"
+compatibility_date = "2025-06-01"
+compatibility_flags = ["nodejs_compat"]
 
-# Set secrets via: wrangler secret put OPENAI_API_KEY etc.
-# Optional vars:
+# Optional: restrict to your site. Defaults to "*".
 [vars]
 ALLOWED_ORIGINS = "*"
 DEFAULT_RATE_LIMIT = "30"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "nexus-ai-db"
+database_id = "4ecca581-8cc6-4f6c-afc8-dd34472d5c2a"
+
+[ai]
+binding = "AI"
+
+# Set provider keys only if you want paid/premium models:
+#   wrangler secret put OPENAI_API_KEY
+#   wrangler secret put ANTHROPIC_API_KEY
+#   wrangler secret put GEMINI_API_KEY
+#   wrangler secret put OPENROUTER_API_KEY

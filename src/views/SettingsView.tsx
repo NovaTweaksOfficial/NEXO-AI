@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useSettings } from '@/state/settings'
 import { useChat } from '@/state/chat'
+import { useAuth } from '@/state/auth'
 import { getAdapter } from '@/lib/providers'
-import { Wifi, Check, X } from 'lucide-react'
+import { Wifi, Check, X, LogOut, UserCircle2, Cloud } from 'lucide-react'
 
 export function SettingsView() {
   const { settings, update, selectedConfig } = useSettings()
-  const { clearAll } = useChat()
+  const { clearAll, resetLocal, syncedCount, syncing } = useChat()
+  const { status, user, signout, openAuth } = useAuth()
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [testing, setTesting] = useState(false)
 
@@ -33,6 +35,41 @@ export function SettingsView() {
   return (
     <div className="page">
       <h2 style={{ margin: '0 0 12px', fontSize: 22, fontWeight: 700 }}>Settings</h2>
+
+      {/* Account */}
+      <div className="glass" style={{ padding: 14, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <UserCircle2 size={34} style={{ color: 'var(--purple-2)' }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {status === 'signedIn' ? user?.email : 'Guest'}
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+              <Cloud size={12} />
+              {status === 'signedIn'
+                ? `${syncing ? 'Syncing…' : 'Synced'} · ${syncedCount} conversation${syncedCount === 1 ? '' : 's'} in your account`
+                : 'Chats stay on this device. Sign in to sync them.'}
+            </div>
+          </div>
+        </div>
+        {status === 'signedIn' ? (
+          <button
+            className="btn"
+            style={{ marginTop: 10 }}
+            onClick={async () => {
+              if (!confirm('Sign out? Your chats stay saved in your account and download again when you sign back in.')) return
+              resetLocal()
+              await signout()
+            }}
+          >
+            <LogOut size={14} /> Sign out
+          </button>
+        ) : (
+          <button className="btn primary" style={{ marginTop: 10 }} onClick={openAuth}>
+            Sign in or create account
+          </button>
+        )}
+      </div>
 
       {/* AI Engine */}
       <div className="glass" style={{ padding: 14, marginBottom: 12 }}>

@@ -4,11 +4,31 @@ export type AIMode = 'general' | 'coding' | 'creative' | 'study' | 'research'
 
 export type MessageRole = 'system' | 'user' | 'assistant'
 
+export interface Attachment {
+  id: string
+  kind: 'image' | 'file'
+  name: string
+  mime: string
+  size: number
+  /** Server-side file id (signed-in users). */
+  fileId?: string
+  /** Local preview / inline payload (guests, and instant rendering). */
+  dataUrl?: string
+  /** Extracted text for documents. */
+  text?: string
+}
+
 export interface ChatMessage {
   id: string
   role: MessageRole
   content: string
   createdAt: number
+  attachments?: Attachment[]
+}
+
+export interface AuthUser {
+  id: string
+  email: string
 }
 
 export interface Conversation {

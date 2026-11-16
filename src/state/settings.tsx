@@ -1,14 +1,16 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 import { load, save } from '@/lib/storage'
+import { DEFAULT_BACKEND } from '@/lib/api'
 import type { AppSettings, ProviderConfig, GenerationSettings } from '@/types'
 
 const DEFAULT_GEN: GenerationSettings = { temperature: 0.7, maxTokens: 1024, topP: 1, stream: true }
 
+const IS_LOCAL = typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+
 const DEFAULT_BACKEND_URL =
   (import.meta as any).env?.VITE_BACKEND_URL ||
-  (typeof window !== 'undefined' && window.location.hostname === 'localhost'
-    ? 'http://localhost:8787'
-    : '')
+  (IS_LOCAL ? 'http://localhost:8787' : DEFAULT_BACKEND)
 
 const DEFAULT_SETTINGS: AppSettings = {
   backendUrl: DEFAULT_BACKEND_URL,

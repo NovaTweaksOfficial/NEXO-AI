@@ -13,10 +13,11 @@ A futuristic personal AI assistant PWA by NEXUS AI. Mobile-first, installable on
 ## Run locally
 
 ```bash
-cd nexus-ai
 npm install
 npm run dev
 ```
+
+Optional: run the API locally with `cd backend && npx wrangler@4 dev`. Local builds automatically use `http://localhost:8787` as the backend; production builds use the deployed Worker.
 
 ## Build
 
@@ -25,27 +26,27 @@ npm run build
 npm run preview
 ```
 
-## Backend (secure AI proxy)
+## Accounts, chats, and attachments
 
-See `backend/README.md`. Requests go through the Cloudflare Worker when `VITE_BACKEND_URL` (repo variable `BACKEND_URL`) is set; no API keys are ever stored in the browser.
+- **Accounts:** email + password. Passwords are salted and hashed server-side (PBKDF2-SHA256); only a random 30-day session token is kept in the browser.
+- **Synced chats:** signed-in conversations are stored in Cloudflare D1 and synced across devices. Guest chats stay on the current device; signing in carries them over once if the account is empty.
+- **Photos:** the camera button, photo-library button, and file picker all attach images. Images are downsized in the browser, then read by a server-side vision model (Mistral Small 3.1 via Workers AI) before the reply is generated.
+- **Files:** PDFs and text-based documents have their text extracted server-side and included in the prompt. Max 6 MB per file, up to 4 attachments per message.
+- **No keys for users:** the free upstream is used when available, with an automatic fallback to Cloudflare Workers AI. No API keys are ever shipped in the browser.
 
-NEXUS works with **zero setup**: with no backend configured it talks to the keyless default engine directly, and with a backend configured it uses the Worker for rate limiting and server-side provider keys. The deployer can add premium provider secrets (OpenAI, Anthropic, Gemini, OpenRouter) server-side.
+The AI is white-labeled as **NEXUS** / **NEXUS Core** in both the app and the server system prompt.
+
+## Backend (Cloudflare Worker)
+
+See `backend/README.md`. Live URL: `https://nexus-ai-backend.nexus-ai-backend.workers.dev`.
 
 ## Deploy to GitHub Pages
 
 **Live app:** https://novatweaksofficial.github.io/NEXO-AI/
 
-This repository is dedicated to NEXUS AI. Every push to `main` builds the app and deploys it to
-GitHub Pages via `.github/workflows/deploy.yml`. The workflow needs the Pages source set to
-**GitHub Actions** (Settings → Pages → Build and deployment → Source: GitHub Actions).
-
-Vite uses a relative base (`./`) so assets, the manifest, and the service worker all resolve
-under the repo path. The app is installable on iOS Safari (Share → Add to Home Screen),
-Android Chrome, and Samsung Internet.
-
-To ship changes:
+Every push to `main` builds the app and deploys it to GitHub Pages via `.github/workflows/deploy.yml` (Pages source: **GitHub Actions**). Vite uses a relative base (`./`) so assets, the manifest, and the service worker resolve under the repo path.
 
 ```bash
-npm run build   # optional local check
+npm run build
 git add -A && git commit -m "..." && git push
 ```

@@ -1,4 +1,4 @@
-import type { ChatMessage, GenerationSettings, ProviderId } from '@/types'
+import type { ChatMessage, GenerationSettings, ProviderId, Attachment } from '@/types'
 
 export interface RuntimeConfig {
   provider: ProviderId
@@ -7,6 +7,8 @@ export interface RuntimeConfig {
   model: string
   mode: 'backend' | 'direct'
   backendUrl?: string
+  /** Session token for account-scoped backend features (file access). */
+  token?: string | null
 }
 
 export interface ProviderInfo {
@@ -27,6 +29,7 @@ export interface ChatOptions {
   systemPrompt?: string
   signal?: AbortSignal
   onChunk?: (text: string) => void
+  attachments?: Attachment[]
 }
 
 export interface ProviderAdapter {

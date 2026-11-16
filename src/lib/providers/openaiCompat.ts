@@ -18,8 +18,10 @@ export function makeOpenAICompat(id: ProviderId): ProviderAdapter {
   return {
     info,
     async chat(cfg, opts) {
-      // backend mode: route through backend
-      if (cfg.mode === 'backend' && cfg.backendUrl) {
+      // backend mode: route through backend. Images always need the backend so
+      // vision can run server-side.
+      const hasImages = !!opts.attachments?.some(a => a.kind === 'image')
+      if ((cfg.mode === 'backend' || hasImages) && cfg.backendUrl) {
         return chatViaBackend(cfg, opts)
       }
       const url = `${baseUrl(cfg, info)}/chat/completions`
@@ -121,16 +123,25 @@ async function chatViaBackend(cfg: RuntimeConfig, opts: ChatOptions): Promise<st
     settings: opts.settings,
     systemPrompt: opts.systemPrompt,
     stream: opts.settings.stream,
+    attachments: (opts.attachments || []).map(a => ({
+      kind: a.kind,
+      fileId: a.fileId,
+      dataUrl: a.dataUrl,
+      name: a.name,
+      mime: a.mime,
+    })),
   }
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (cfg.token) headers.Authorization = `Bearer ${cfg.token}`
   if (!opts.settings.stream) {
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: opts.signal })
+    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: opts.signal })
     if (!res.ok) throw new Error(await res.text())
     const data = await res.json()
     const text = data?.text ?? ''
     opts.onChunk?.(text)
     return text
   }
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: opts.signal })
+  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: opts.signal })
   if (!res.ok) throw new Error(await res.text())
   const reader = res.body!.getReader()
   const decoder = new TextDecoder()

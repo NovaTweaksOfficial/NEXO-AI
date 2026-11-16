@@ -1,4 +1,4 @@
-export type ProviderId = 'openai' | 'anthropic' | 'gemini' | 'openrouter' | 'pollinations' | 'custom'
+export type ProviderId = 'openai' | 'anthropic' | 'gemini' | 'openrouter' | 'pollinations' | 'workersai' | 'custom'
 
 export interface ChatSettings {
   temperature: number
@@ -20,6 +20,7 @@ export const DEFAULT_MODELS: Record<ProviderId, string[]> = {
   gemini: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
   openrouter: ['openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet', 'google/gemini-2.0-flash-001'],
   pollinations: ['openai-fast'],
+  workersai: ['@cf/meta/llama-3.3-70b-instruct-fp8-fast'],
   custom: [],
 }
 
@@ -30,6 +31,7 @@ export function defaultBaseUrl(p: ProviderId): string {
     case 'gemini': return 'https://generativelanguage.googleapis.com/v1beta/openai'
     case 'openrouter': return 'https://openrouter.ai/api/v1'
     case 'pollinations': return 'https://text.pollinations.ai/openai'
+    case 'workersai': return ''
     case 'custom': return ''
   }
 }
@@ -42,6 +44,7 @@ export function apiKeyFor(env: any, p: ProviderId): string | undefined {
     case 'openrouter': return env.OPENROUTER_API_KEY
     case 'custom': return env.CUSTOM_API_KEY
     case 'pollinations': return undefined
+    case 'workersai': return undefined
   }
 }
 

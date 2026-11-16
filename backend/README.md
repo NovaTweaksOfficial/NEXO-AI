@@ -1,26 +1,39 @@
 # NEXUS AI Backend (Cloudflare Worker)
 
-Secure proxy that holds AI provider API keys server-side. Supports OpenAI, Anthropic, Google Gemini, OpenRouter, and custom OpenAI-compatible endpoints.
+Keyless AI proxy + account service for NEXUS AI. Holds provider secrets, D1 data, and Workers AI bindings server-side — nothing secret is shipped to the browser.
 
-**Zero-config default:** the app uses the free Pollinations provider out of the box, so end users never need an API key. Add provider secrets only if you want premium/paid models.
+## What it does
+
+- Email/password accounts (PBKDF2-SHA256, 100k iterations) with 30-day bearer sessions
+- Per-account conversation sync in D1
+- Per-account file storage in D1 (max 6 MB), with PDF/text extraction via `unpdf`
+- Image understanding through Workers AI (Mistral Small 3.1 vision); results are injected into the text prompt
+- Keyless text chat via Pollinations, with automatic fallback to Cloudflare Workers AI when the free upstream is busy
+- White-labeled NEXUS identity enforced in the system prompt
+
+## Live deployment
+
+`https://nexus-ai-backend.nexus-ai-backend.workers.dev`
+
+Bindings (see `wrangler.toml`): D1 `DB` → `nexus-ai-db`, AI `AI`.
 
 ## Develop
 
 ```bash
-cd nexus-ai/backend
 npm install
+npx wrangler@4 d1 execute nexus-ai-db --local --file=./schema.sql
 npm run dev   # http://127.0.0.1:8787
 ```
 
-## Configure secrets
+## Configure optional secrets
+
+Only needed if you want to use paid provider models beyond the keyless defaults:
 
 ```bash
 npx wrangler secret put OPENAI_API_KEY
 npx wrangler secret put ANTHROPIC_API_KEY
 npx wrangler secret put GEMINI_API_KEY
 npx wrangler secret put OPENROUTER_API_KEY
-# optional
-npx wrangler secret put CUSTOM_API_KEY
 ```
 
 ## Deploy
@@ -29,13 +42,26 @@ npx wrangler secret put CUSTOM_API_KEY
 npm run deploy
 ```
 
-Copy the deployed URL into the app's Settings → Backend URL.
-
 ## Endpoints
 
-- `GET /health`
-- `POST /api/test` — `{ provider, baseUrl?, model? }`
-- `POST /api/models` — `{ provider, baseUrl? }`
-- `POST /api/chat` — `{ provider, model, messages, settings, systemPrompt?, stream? }`
+Auth:
 
-CORS is configured for all origins by default (`ALLOWED_ORIGINS="*"`). Restrict via `wrangler.toml` vars.
+- `POST /api/auth/register` — `{ email, password }` → `{ token, user }`
+- `POST /api/auth/login` — `{ email, password }` → `{ token, user }`
+- `POST /api/auth/logout` — Bearer token
+- `GET /api/auth/me` — Bearer token
+
+Data:
+
+- `GET /api/conversations` — Bearer token
+- `PUT /api/conversations/:id` — Bearer token, `{ data }`
+- `DELETE /api/conversations/:id` — Bearer token
+- `POST /api/files` — Bearer token, multipart `file`
+- `GET /api/files/:id` — Bearer token
+
+Chat:
+
+- `POST /api/chat` — `{ provider, model, messages, settings, systemPrompt?, attachments? }`
+- `GET /health`
+
+CORS defaults to `*`; restrict with the `ALLOWED_ORIGINS` var (comma-separated).

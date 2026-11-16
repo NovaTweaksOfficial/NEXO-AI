@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { SettingsProvider } from './state/settings'
+import { AuthProvider } from './state/auth'
 import { ChatProvider } from './state/chat'
 import { UiProvider } from './state/ui'
 import App from './App'
@@ -16,11 +17,13 @@ if ('serviceWorker' in navigator) {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <SettingsProvider>
-      <ChatProvider>
-        <UiProvider>
-          <App />
-        </UiProvider>
-      </ChatProvider>
+      <AuthProvider>
+        <ChatProvider>
+          <UiProvider>
+            <App />
+          </UiProvider>
+        </ChatProvider>
+      </AuthProvider>
     </SettingsProvider>
   </React.StrictMode>
 )
