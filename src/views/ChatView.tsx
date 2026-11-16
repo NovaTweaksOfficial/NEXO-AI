@@ -7,6 +7,7 @@ import { getAdapter } from '@/lib/providers'
 import { NEXUS_IDENTITY } from '@/lib/identity'
 import { uid } from '@/lib/storage'
 import { playSend, playReceive, playError } from '@/lib/sounds'
+import { RobotIcon } from '@/components/RobotMascot'
 import {
   compressImage,
   fetchFileObjectUrl,
@@ -17,7 +18,7 @@ import {
 import type { Attachment, ChatMessage } from '@/types'
 import {
   Send, Square, RotateCcw, Copy, Check, ChevronDown, MessageCircle, Code2, Sparkles,
-  GraduationCap, Search, Camera, ImagePlus, Paperclip, X, Loader2, FileText,
+  GraduationCap, Search, Camera, ImagePlus, Paperclip, X, FileText,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -413,7 +414,7 @@ export function ChatView() {
               <ImagePlus size={18} />
             </button>
             <button className="btn ghost" style={{ padding: 8 }} title="Upload a file" onClick={() => filesRef.current?.click()} disabled={preparing || pending.length >= MAX_ATTACHMENTS}>
-              {preparing ? <Loader2 size={18} className="spin" /> : <Paperclip size={18} />}
+              {preparing ? <RobotIcon size={18} className="spin" /> : <Paperclip size={18} />}
             </button>
           </div>
           <textarea

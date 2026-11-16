@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#17152e"/>
+      <stop offset="100%" stop-color="#07070f"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3a3568"/>
+      <stop offset="55%" stop-color="#1e1c3a"/>
+      <stop offset="100%" stop-color="#0f0e20"/>
+    </linearGradient>
+    <radialGradient id="eye" cx="50%" cy="45%" r="60%">
+      <stop offset="0%" stop-color="#ddd6fe"/>
+      <stop offset="45%" stop-color="#a78bfa"/>
+      <stop offset="100%" stop-color="#6d28d9"/>
+    </radialGradient>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="12" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect x="6" y="6" width="500" height="500" rx="106" fill="none" stroke="#8b5cf6" stroke-opacity="0.55" stroke-width="4"/>
+
+  <!-- antenna -->
+  <line x1="256" y1="74" x2="256" y2="118" stroke="#a78bfa" stroke-width="9" stroke-linecap="round" filter="url(#glow)"/>
+  <circle cx="256" cy="64" r="20" fill="url(#eye)" filter="url(#glow)"/>
+
+  <!-- head -->
+  <rect x="96" y="118" width="320" height="272" rx="72" fill="url(#metal)" stroke="#8b5cf6" stroke-width="7"/>
+  <rect x="126" y="146" width="260" height="36" rx="18" fill="#6d6aa8" opacity="0.35"/>
+
+  <!-- face panel -->
+  <rect x="134" y="190" width="244" height="160" rx="50" fill="#080815" stroke="#8b5cf6" stroke-opacity="0.45" stroke-width="4"/>
+
+  <!-- eyes -->
+  <g filter="url(#glow)">
+    <rect x="164" y="226" width="70" height="54" rx="20" fill="url(#eye)" opacity="0.9"/>
+    <rect x="278" y="226" width="70" height="54" rx="20" fill="url(#eye)" opacity="0.9"/>
+  </g>
+  <rect x="178" y="236" width="26" height="14" rx="7" fill="#ffffff" opacity="0.85"/>
+  <rect x="292" y="236" width="26" height="14" rx="7" fill="#ffffff" opacity="0.85"/>
+
+  <!-- smile -->
+  <path d="M 206 326 Q 256 358 306 326" fill="none" stroke="#a78bfa" stroke-width="13" stroke-linecap="round"/>
+
+  <!-- side bolts -->
+  <circle cx="104" cy="254" r="12" fill="#60a5fa" filter="url(#glow)"/>
+  <circle cx="408" cy="254" r="12" fill="#60a5fa" filter="url(#glow)"/>
+</svg>

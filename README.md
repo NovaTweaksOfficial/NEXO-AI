@@ -40,6 +40,16 @@ The AI is white-labeled as **NEXUS** / **NEXUS Core** in both the app and the se
 
 See `backend/README.md`. Live URL: `https://nexus-ai-backend.nexus-ai-backend.workers.dev`.
 
+## Desktop apps (macOS + Windows)
+
+Native desktop builds are published on the [Releases page](https://github.com/NovaTweaksOfficial/NEXUS-AI/releases):
+
+- **macOS Apple Silicon:** `NEXUS-AI-macOS-arm64.dmg`
+- **macOS Intel:** `NEXUS-AI-macOS-x64.dmg`
+- **Windows 10/11 (64-bit):** `NEXUS-AI-Windows-x64.exe` (portable, no install required)
+
+Both bundle the web app with the robot icon and work without a browser. See `desktop/README.md` for build instructions and unsigned-app open instructions.
+
 ## Deploy to GitHub Pages
 
 **Live app:** https://novatweaksofficial.github.io/NEXUS-AI/

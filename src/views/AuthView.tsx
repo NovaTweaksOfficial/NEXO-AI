@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useAuth } from '@/state/auth'
-import { RobotMascot } from '@/components/RobotMascot'
+import { RobotMascot, RobotIcon } from '@/components/RobotMascot'
 import { playTap, playBoot } from '@/lib/sounds'
-import { Mail, Lock, Loader2, ArrowRight } from 'lucide-react'
+import { Mail, Lock, ArrowRight } from 'lucide-react'
 
 export function AuthView() {
   const { signup, signin, continueAsGuest } = useAuth()
@@ -94,7 +94,7 @@ export function AuthView() {
         {error && <div style={{ color: 'var(--danger)', fontSize: 12.5 }}>{error}</div>}
 
         <button className="btn primary" type="submit" disabled={busy} style={{ height: 44, marginTop: 4 }}>
-          {busy ? <Loader2 size={16} className="spin" /> : <ArrowRight size={16} />}
+          {busy ? <RobotIcon size={16} className="spin" /> : <ArrowRight size={16} />}
           {busy ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Sign in'}
         </button>
 

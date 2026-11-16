@@ -1,6 +1,18 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 
+export function RobotIcon({ size = 20, className = '' }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 120 120" className={className} xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <rect x="18" y="26" width="84" height="70" rx="20" fill="#1a1a30" stroke="#8b5cf6" strokeWidth="5" />
+      <rect x="30" y="40" width="60" height="40" rx="12" fill="#0a0a18" />
+      <rect x="38" y="50" width="16" height="12" rx="4" fill="#a78bfa" />
+      <rect x="66" y="50" width="16" height="12" rx="4" fill="#a78bfa" />
+      <path d="M 46 70 Q 60 78 74 70" fill="none" stroke="#8b5cf6" strokeWidth="4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 interface Props {
   size?: number
   className?: string

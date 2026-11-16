@@ -1,0 +1,63 @@
+{
+  "name": "nexus-ai-desktop",
+  "version": "1.0.0",
+  "description": "NEXUS AI native desktop app for macOS and Windows",
+  "main": "main.js",
+  "private": true,
+  "author": "FL3SH (r00ster)",
+  "allowScripts": {
+    "electron": true
+  },
+  "scripts": {
+    "bundle": "rm -rf app && mkdir -p app && cp -R ../dist/. app/",
+    "build:mac": "npm run bundle && electron-builder --mac --x64",
+    "build:win": "npm run bundle && electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "com.nexusai.desktop",
+    "productName": "NEXUS AI",
+    "files": [
+      "main.js",
+      "app/**/*",
+      "build/icon.png"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.productivity",
+      "artifactName": "NEXUS-AI-macOS-${arch}.${ext}"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "NEXUS-AI-Windows-${arch}.${ext}"
+    },
+    "portable": {
+      "useZip": false
+    }
+  },
+  "devDependencies": {
+    "electron": "^38.8.6",
+    "electron-builder": "^25.1.8"
+  },
+  "allowScripts": {
+    "electron@38.8.6": true
+  }
+}

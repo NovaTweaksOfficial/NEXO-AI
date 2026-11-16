@@ -5,6 +5,7 @@ import { useAuth } from '@/state/auth'
 import { getAdapter } from '@/lib/providers'
 import { fetchUsage, type UsageInfo } from '@/lib/api'
 import { playTap } from '@/lib/sounds'
+import { RobotIcon } from '@/components/RobotMascot'
 import { Wifi, Check, X, LogOut, UserCircle2, Cloud, Activity, RefreshCw, Zap, Volume2 } from 'lucide-react'
 
 function Toggle({ on, onChange, label }: { on: boolean; onChange: () => void; label: string }) {
@@ -325,7 +326,9 @@ export function SettingsView() {
       </div>
 
       <div className="glass" style={{ padding: 14, marginBottom: 12 }}>
-        <div style={{ fontWeight: 600, marginBottom: 6 }}>Install as App (iPhone)</div>
+        <div style={{ fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <RobotIcon size={20} /> Install NEXUS AI on your device
+        </div>
         <ol style={{ fontSize: 12, color: 'var(--text-2)', paddingLeft: 18, margin: 0, lineHeight: 1.7 }}>
           <li>Open this site in Safari.</li>
           <li>Tap the Share button.</li>

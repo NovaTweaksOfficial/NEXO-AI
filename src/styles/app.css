@@ -217,3 +217,30 @@ html[data-motion='off'] *::after {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Robot loading halo */
+.robot-loader {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 148px;
+  height: 148px;
+  margin: 0 auto;
+}
+.robot-loader::before,
+.robot-loader::after {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: var(--purple-2);
+  border-right-color: rgba(139, 92, 246, 0.35);
+}
+.robot-loader::before { animation: robot-spin 3s linear infinite; }
+.robot-loader::after {
+  inset: 0;
+  border-top-color: rgba(59, 130, 246, 0.6);
+  animation: robot-spin 2s linear infinite reverse;
+}
+@keyframes robot-spin { to { transform: rotate(360deg); } }

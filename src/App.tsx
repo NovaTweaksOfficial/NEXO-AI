@@ -4,6 +4,7 @@ import { useUi } from './state/ui'
 import { useSettings } from './state/settings'
 import { useAuth } from './state/auth'
 import { useChat } from './state/chat'
+import { RobotMascot, RobotIcon } from './components/RobotMascot'
 import { playNavigate } from './lib/sounds'
 import { HomeView } from './views/HomeView'
 import { ChatView } from './views/ChatView'
@@ -24,9 +25,20 @@ const TABS = [
 function Splash() {
   return (
     <div className="page" style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center' }}>
-      <div style={{ textAlign: 'center' }}>
-        <div className="title-gradient" style={{ fontSize: 26, fontWeight: 800 }}>NEXUS AI</div>
-        <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>Loading…</div>
+      <div style={{ textAlign: 'center', maxWidth: 320 }}>
+        <div className="robot-loader">
+          <RobotMascot size={116} trackCursor />
+        </div>
+        <div className="title-gradient" style={{ fontSize: 26, fontWeight: 800, marginTop: 8 }}>NEXUS AI</div>
+        <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, margin: '10px 0 0' }}>
+          Sorry, we're working hard to load your content. NEXUS is waking up its circuits…
+        </p>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 14 }}>
+          <span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" />
+        </div>
+        <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-3)' }}>
+          <RobotIcon size={14} /> Loading NEXUS Core
+        </div>
       </div>
     </div>
   )
