@@ -42,7 +42,7 @@ See `backend/README.md`. Live URL: `https://nexus-ai-backend.nexus-ai-backend.wo
 
 ## Deploy to GitHub Pages
 
-**Live app:** https://novatweaksofficial.github.io/NEXO-AI/
+**Live app:** https://novatweaksofficial.github.io/NEXUS-AI/
 
 Every push to `main` builds the app and deploys it to GitHub Pages via `.github/workflows/deploy.yml` (Pages source: **GitHub Actions**). Vite uses a relative base (`./`) so assets, the manifest, and the service worker resolve under the repo path.
 
