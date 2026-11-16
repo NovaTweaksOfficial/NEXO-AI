@@ -6,7 +6,6 @@ compatibility_flags = ["nodejs_compat"]
 # Optional: restrict to your site. Defaults to "*".
 [vars]
 ALLOWED_ORIGINS = "*"
-DEFAULT_RATE_LIMIT = "30"
 
 [[d1_databases]]
 binding = "DB"

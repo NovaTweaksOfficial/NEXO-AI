@@ -10,6 +10,7 @@ Keyless AI proxy + account service for NEXUS AI. Holds provider secrets, D1 data
 - Image understanding through Workers AI (Mistral Small 3.1 vision); results are injected into the text prompt
 - Keyless text chat via Pollinations, with automatic fallback to Cloudflare Workers AI when the free upstream is busy
 - White-labeled NEXUS identity enforced in the system prompt
+- No application-level rate limits or daily message caps
 
 ## Live deployment
 
