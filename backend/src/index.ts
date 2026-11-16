@@ -424,7 +424,7 @@ export default {
 
         const name = String(file.name || 'file').slice(0, 200)
         const mime = String(file.type || 'application/octet-stream')
-        const text = await extractDocumentText(bytes, name, mime)
+        const text = await extractDocumentText(new Uint8Array(bytes), name, mime)
         const id = randomHex(16)
         await env.DB.prepare(
           'INSERT INTO files (id, user_id, name, mime, size, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
