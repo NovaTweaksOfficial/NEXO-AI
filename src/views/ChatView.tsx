@@ -6,6 +6,7 @@ import { useAuth } from '@/state/auth'
 import { getAdapter } from '@/lib/providers'
 import { NEXUS_IDENTITY } from '@/lib/identity'
 import { uid } from '@/lib/storage'
+import { playSend, playReceive, playError } from '@/lib/sounds'
 import {
   compressImage,
   fetchFileObjectUrl,
@@ -190,6 +191,7 @@ export function ChatView() {
     const text = raw || (attachments.length ? 'Describe what is attached.' : '')
     if (!text || streaming) return
     if (!conv) return
+    playSend()
     setError(null)
     setInput('')
     setPending([])
@@ -253,6 +255,7 @@ export function ChatView() {
     setStreaming(true)
     const ac = new AbortController()
     abortRef.current = ac
+    let failed = false
     try {
       await adapter.chat(runtimeCfg, {
         messages: historyForModel,
@@ -261,18 +264,21 @@ export function ChatView() {
         systemPrompt: MODE_PROMPTS[mode],
         signal: ac.signal,
         attachments: imageAttachments,
-        unlimited: settings.unlimitedReplies,
+        fast: settings.fastReplies,
         onChunk: (full) => updateMessage(conv.id, assistantMsg.id, full),
       })
     } catch (e: any) {
       if (e?.name === 'AbortError') {
         // keep partial
       } else {
+        failed = true
         const msg = e?.message || 'Request failed.'
+        playError()
         setError(msg)
         updateMessage(conv.id, assistantMsg.id, `⚠️ ${msg}`)
       }
     } finally {
+      if (!failed) playReceive()
       setStreaming(false)
       abortRef.current = null
     }

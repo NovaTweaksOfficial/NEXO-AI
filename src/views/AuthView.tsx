@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '@/state/auth'
 import { RobotMascot } from '@/components/RobotMascot'
+import { playTap, playBoot } from '@/lib/sounds'
 import { Mail, Lock, Loader2, ArrowRight } from 'lucide-react'
 
 export function AuthView() {
@@ -24,6 +25,7 @@ export function AuthView() {
     try {
       if (mode === 'signup') await signup(cleanEmail, password)
       else await signin(cleanEmail, password)
+      playBoot()
     } catch (err: any) {
       setError(err?.message || 'Could not sign in. Try again.')
     } finally {
@@ -100,14 +102,18 @@ export function AuthView() {
           type="button"
           className="btn ghost"
           style={{ height: 40 }}
-          onClick={() => { setMode(m => (m === 'signup' ? 'signin' : 'signup')); setError(null) }}
+          onClick={() => {
+            playTap()
+            setMode(m => (m === 'signup' ? 'signin' : 'signup'))
+            setError(null)
+          }}
         >
           {mode === 'signup' ? 'I already have an account' : 'Create a new account'}
         </button>
       </form>
 
       <div style={{ textAlign: 'center', marginTop: 14 }}>
-        <button className="btn ghost" onClick={continueAsGuest} style={{ fontSize: 12.5, color: 'var(--text-2)' }}>
+        <button className="btn ghost" onClick={() => { playTap(); continueAsGuest() }} style={{ fontSize: 12.5, color: 'var(--text-2)' }}>
           Continue without an account
         </button>
         <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 10, lineHeight: 1.6 }}>

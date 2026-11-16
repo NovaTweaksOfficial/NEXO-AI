@@ -1,8 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, type ReactNode } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useUi } from './state/ui'
 import { useSettings } from './state/settings'
 import { useAuth } from './state/auth'
 import { useChat } from './state/chat'
+import { playNavigate } from './lib/sounds'
 import { HomeView } from './views/HomeView'
 import { ChatView } from './views/ChatView'
 import { ToolboxView } from './views/ToolboxView'
@@ -39,7 +41,8 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', settings.theme)
     document.documentElement.setAttribute('data-accent', settings.accent)
-  }, [settings.theme, settings.accent])
+    document.documentElement.setAttribute('data-motion', settings.reducedMotion ? 'off' : 'on')
+  }, [settings.theme, settings.accent, settings.reducedMotion])
 
   // Flush pending conversation changes when the app is backgrounded.
   useEffect(() => {
@@ -56,14 +59,29 @@ export default function App() {
   if (status === 'loading') return <Splash />
   if (status === 'signedOut') return <AuthView />
 
+  const views: Record<string, ReactNode> = {
+    home: <HomeView />,
+    chat: <ChatView />,
+    toolbox: <ToolboxView />,
+    history: <HistoryView />,
+    settings: <SettingsView />,
+  }
+
   return (
     <div className="app-shell">
       <main style={{ flex: 1, overflow: 'auto' }}>
-        {tab === 'home' && <HomeView />}
-        {tab === 'chat' && <ChatView />}
-        {tab === 'toolbox' && <ToolboxView />}
-        {tab === 'history' && <HistoryView />}
-        {tab === 'settings' && <SettingsView />}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={tab}
+            style={{ height: '100%' }}
+            initial={{ opacity: 0, y: 14, scale: 0.985 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.99 }}
+            transition={{ duration: settings.reducedMotion ? 0 : 0.22, ease: 'easeOut' }}
+          >
+            {views[tab]}
+          </motion.div>
+        </AnimatePresence>
       </main>
       <nav className="bottom-nav">
         {TABS.map(t => {
@@ -72,7 +90,10 @@ export default function App() {
             <button
               key={t.id}
               className={`nav-item ${tab === t.id ? 'active' : ''}`}
-              onClick={() => setTab(t.id as any)}
+              onClick={() => {
+                if (tab !== t.id) playNavigate()
+                setTab(t.id as any)
+              }}
             >
               <Icon size={22} />
               <span>{t.label}</span>

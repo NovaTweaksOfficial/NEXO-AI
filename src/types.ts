@@ -71,9 +71,11 @@ export interface AppSettings {
   accent: 'purple' | 'blue' | 'cyan' | 'pink'
   fontSize: 'sm' | 'md' | 'lg'
   reducedMotion: boolean
+  /** Short synthesized interface sounds. */
+  soundEffects: boolean
   saveHistory: boolean
-  /** Skip the throttled free engine and use the unlimited-capable route. */
-  unlimitedReplies: boolean
+  /** Skip the throttled free-engine check and use the direct fallback engine. */
+  fastReplies: boolean
 }
 
 export type TabId = 'home' | 'chat' | 'toolbox' | 'history' | 'settings'

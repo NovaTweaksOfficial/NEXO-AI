@@ -625,13 +625,13 @@ export default {
         const body = await parseBody(req)
         const p: ProviderId = validateProvider(body?.provider) ? body.provider : 'pollinations'
         const configuredKey = apiKeyFor(env, p)
-        const unlimited = body?.unlimited === true && p === 'pollinations'
-        const useKey = unlimited && !!configuredKey
+        const fast = body?.fast === true && p === 'pollinations'
+        const useKey = fast && !!configuredKey
         // With the toggle on, skip the throttled free request entirely: use the
         // keyed endpoint when a pollen key exists, otherwise go straight to the
         // Workers AI fallback so replies aren't delayed by a rejected request.
         const key = p === 'pollinations' && !useKey ? undefined : configuredKey
-        const skipUpstream = unlimited && !useKey
+        const skipUpstream = fast && !useKey
         const { base, model: upstreamModel } = upstreamFor(p, key, body?.baseUrl, body?.model)
         if (!['custom', 'pollinations', 'workersai'].includes(p) && !key) {
           return json({ error: 'NEXUS Core is not configured on the server.' }, 400, cors)

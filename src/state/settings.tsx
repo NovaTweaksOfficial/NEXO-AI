@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 import { load, save } from '@/lib/storage'
 import { DEFAULT_BACKEND } from '@/lib/api'
+import { setSoundEnabled } from '@/lib/sounds'
 import type { AppSettings, ProviderConfig, GenerationSettings } from '@/types'
 
 const DEFAULT_GEN: GenerationSettings = { temperature: 0.7, maxTokens: 1024, topP: 1, stream: true }
@@ -23,8 +24,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   accent: 'purple',
   fontSize: 'md',
   reducedMotion: false,
+  soundEffects: true,
   saveHistory: true,
-  unlimitedReplies: false,
+  fastReplies: false,
 }
 
 interface Ctx {
@@ -49,10 +51,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     // Migration: older installs may have an empty backend URL. Always fall back
     // to the configured default so users never need to set anything up.
     if (!merged.backendUrl) merged.backendUrl = DEFAULT_BACKEND_URL
+    // Rename migration: the old toggle was called "Unlimited replies".
+    const legacy = load<Record<string, unknown>>('settings', {})
+    if (typeof legacy.unlimitedReplies === 'boolean' && typeof legacy.fastReplies !== 'boolean') {
+      merged.fastReplies = legacy.unlimitedReplies
+    }
     return merged
   })
   useEffect(() => {
     save('settings', settings)
+    setSoundEnabled(settings.soundEffects)
   }, [settings])
 
   const persist = useCallback((next: AppSettings) => {

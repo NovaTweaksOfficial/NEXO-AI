@@ -3,6 +3,7 @@ import { useSettings } from '@/state/settings'
 import { getAdapter } from '@/lib/providers'
 import { NEXUS_IDENTITY } from '@/lib/identity'
 import { uid } from '@/lib/storage'
+import { playTap, playSend, playReceive, playError } from '@/lib/sounds'
 import { Play, Copy, Check } from 'lucide-react'
 import type { ToolDef } from '@/types'
 
@@ -29,7 +30,7 @@ export function ToolboxView() {
         <h2 style={{ margin: '0 0 12px', fontSize: 22, fontWeight: 700 }}>Toolbox</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10 }}>
           {TOOLS.map(t => (
-            <button key={t.id} className="glass" style={{ padding: 14, textAlign: 'left', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--text)' }} onClick={() => setActive(t.id)}>
+            <button key={t.id} className="glass" style={{ padding: 14, textAlign: 'left', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--text)' }} onClick={() => { playTap(); setActive(t.id) }}>
               <div style={{ fontSize: 24, marginBottom: 6 }}>{t.icon}</div>
               <div style={{ fontWeight: 600, fontSize: 13 }}>{t.name}</div>
               <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{t.description}</div>
@@ -52,7 +53,8 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
 
   const run = async () => {
     if (!input.trim() || loading) return
-    if (!cfg) { setError('No AI provider configured. Go to Settings.'); return }
+    if (!cfg) { playError(); setError('No AI provider configured. Go to Settings.'); return }
+    playSend()
     setLoading(true); setError(null); setOutput('')
     const adapter = getAdapter(cfg.provider)
     const runtimeCfg = {
@@ -73,8 +75,10 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
       })
       if (!output) setOutput(text)
     } catch (e: any) {
+      playError()
       setError(e?.message || 'Failed.')
     } finally {
+      playReceive()
       setLoading(false)
     }
   }

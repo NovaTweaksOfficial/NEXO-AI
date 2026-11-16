@@ -123,7 +123,7 @@ async function chatViaBackend(cfg: RuntimeConfig, opts: ChatOptions): Promise<st
     settings: opts.settings,
     systemPrompt: opts.systemPrompt,
     stream: opts.settings.stream,
-    unlimited: opts.unlimited,
+    fast: opts.fast,
     attachments: (opts.attachments || []).map(a => ({
       kind: a.kind,
       fileId: a.fileId,

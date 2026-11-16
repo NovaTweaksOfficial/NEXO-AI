@@ -1,6 +1,8 @@
 import { useUi } from '@/state/ui'
 import { useChat } from '@/state/chat'
+import { useSettings } from '@/state/settings'
 import { RobotMascot } from '@/components/RobotMascot'
+import { playTap } from '@/lib/sounds'
 import { Sparkles, Code2, PenTool, Search, Lightbulb } from 'lucide-react'
 
 const SUGGESTED = [
@@ -15,8 +17,10 @@ const SUGGESTED = [
 export function HomeView() {
   const { setTab } = useUi()
   const { newConversation } = useChat()
+  const { settings } = useSettings()
 
   const startPrompt = (text: string) => {
+    playTap()
     newConversation('general')
     setTab('chat')
     // store pending prompt
@@ -30,7 +34,7 @@ export function HomeView() {
           <h1 className="title-gradient" style={{ fontSize: 26, margin: 0, fontWeight: 800 }}>NEXUS AI</h1>
           <p style={{ color: 'var(--text-2)', fontSize: 13, margin: '4px 0 0' }}>Your futuristic personal AI.</p>
         </div>
-        <RobotMascot size={72} />
+        <RobotMascot size={72} trackCursor={!settings.reducedMotion} />
       </header>
 
       <div className="glass" style={{ padding: 16, marginBottom: 16 }}>
@@ -39,7 +43,7 @@ export function HomeView() {
         </p>
       </div>
 
-      <div className="card" style={{ marginBottom: 16, cursor: 'pointer' }} onClick={() => setTab('chat')}>
+      <div className="card" style={{ marginBottom: 16, cursor: 'pointer' }} onClick={() => { playTap(); setTab('chat') }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-3)' }}>
           <Sparkles size={18} />
           <span>Ask NEXUS anything…</span>

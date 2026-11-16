@@ -4,7 +4,28 @@ import { useChat } from '@/state/chat'
 import { useAuth } from '@/state/auth'
 import { getAdapter } from '@/lib/providers'
 import { fetchUsage, type UsageInfo } from '@/lib/api'
-import { Wifi, Check, X, LogOut, UserCircle2, Cloud, Activity, RefreshCw, Zap } from 'lucide-react'
+import { playTap } from '@/lib/sounds'
+import { Wifi, Check, X, LogOut, UserCircle2, Cloud, Activity, RefreshCw, Zap, Volume2 } from 'lucide-react'
+
+function Toggle({ on, onChange, label }: { on: boolean; onChange: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={onChange}
+      style={{
+        width: 44, height: 25, borderRadius: 99, border: 'none', padding: 3,
+        cursor: 'pointer', flexShrink: 0,
+        background: on ? 'var(--purple-2)' : 'rgba(255,255,255,0.16)',
+        display: 'flex', alignItems: 'center', justifyContent: on ? 'flex-end' : 'flex-start',
+      }}
+    >
+      <span style={{ width: 19, height: 19, borderRadius: '50%', background: '#fff', display: 'block' }} />
+    </button>
+  )
+}
 
 export function SettingsView() {
   const { settings, update, selectedConfig } = useSettings()
@@ -136,30 +157,33 @@ export function SettingsView() {
         )}
       </div>
 
-      {/* Unlimited replies */}
+      {/* Fast replies */}
       <div className="glass" style={{ padding: 14, marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Zap size={16} style={{ color: 'var(--purple-2)' }} />
             <div>
-              <strong style={{ fontSize: 14 }}>Unlimited replies</strong>
+              <strong style={{ fontSize: 14 }}>Fast replies</strong>
               <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
-                {settings.unlimitedReplies ? 'On' : 'Off'} · {usage?.pollenConfigured ? 'server key active' : 'no server key configured'}
+                {settings.fastReplies ? 'On' : 'Off'} · {usage?.pollenConfigured ? 'server key active' : 'no server key configured'}
               </div>
             </div>
           </div>
           <button
             type="button"
             role="switch"
-            aria-checked={!!settings.unlimitedReplies}
-            aria-label="Unlimited replies"
-            onClick={() => update({ unlimitedReplies: !settings.unlimitedReplies })}
+            aria-checked={!!settings.fastReplies}
+            aria-label="Fast replies"
+            onClick={() => {
+              update({ fastReplies: !settings.fastReplies })
+              playTap()
+            }}
             style={{
               width: 44, height: 25, borderRadius: 99, border: 'none', padding: 3,
               cursor: 'pointer', flexShrink: 0,
-              background: settings.unlimitedReplies ? 'var(--purple-2)' : 'rgba(255,255,255,0.16)',
+              background: settings.fastReplies ? 'var(--purple-2)' : 'rgba(255,255,255,0.16)',
               display: 'flex', alignItems: 'center',
-              justifyContent: settings.unlimitedReplies ? 'flex-end' : 'flex-start',
+              justifyContent: settings.fastReplies ? 'flex-end' : 'flex-start',
             }}
           >
             <span style={{ width: 19, height: 19, borderRadius: '50%', background: '#fff', display: 'block' }} />
@@ -167,31 +191,34 @@ export function SettingsView() {
         </div>
 
         <div style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.6, marginTop: 10 }}>
-          {settings.unlimitedReplies ? (
+          {settings.fastReplies ? (
             usage?.pollenConfigured ? (
               <>
-                No per-IP throttle — send messages back-to-back. Same engine and quality, typically{' '}
-                <strong>1–3 seconds</strong> per reply (about the same as now). If the key runs out of
-                credits or the service is down, NEXUS falls back automatically.
+                A server pollen key is active, so messages go back-to-back with no per-IP throttle —
+                same engine and quality, typically <strong>1–3 seconds</strong> per reply. If the key
+                runs out of credits or the service is down, NEXUS falls back automatically.
               </>
             ) : (
               <>
-                Every reply goes straight to the shared Cloudflare engine. It skips the free-engine
-                check, so replies can be <strong>~0.5–1 second faster</strong>, but it spends the daily
-                budget — about <strong>100–140 replies</strong> before the {resetTime || 'next'} reset.
-                For truly unlimited replies, add a server-side pollen key.
+                Every reply goes straight to NEXUS Core's fallback engine instead of first checking
+                the free engine. That saves roughly <strong>0.5–1 second</strong> per message. It does
+                <strong> not</strong> remove limits: each reply still spends the shared daily budget —
+                about <strong>100–140 replies</strong> before the {resetTime || 'next'} reset, after which
+                NEXUS pauses until that time.
               </>
             )
           ) : (
             <>
-              Uses the free engine first (costs nothing from the daily budget). When it is busy —
-              about <strong>1 reply per 30–45 seconds</strong> — NEXUS retries on the fallback engine,
-              adding roughly <strong>0.5–1.5 seconds</strong> to that reply. Turn this on to skip the check.
+              NEXUS tries the free engine first, which costs <strong>nothing</strong> from the daily
+              budget when it is available. When it is busy — about <strong>1 reply per 30–45 seconds</strong> —
+              NEXUS automatically retries on the fallback engine, adding roughly{' '}
+              <strong>0.5–1.5 seconds</strong> to that reply. Turn this on to skip that check and reply faster.
             </>
           )}
         </div>
         <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 8 }}>
-          Applies to new messages. Photos always use vision and count toward the daily budget.
+          Applies to new text messages only. Photos always use the vision engine and still count toward
+          the daily budget, as do uploads of 4 files / 6 MB per message.
         </div>
       </div>
 
@@ -254,6 +281,36 @@ export function SettingsView() {
           {(['purple', 'blue', 'cyan', 'pink'] as const).map(a => (
             <button key={a} className={`btn ${settings.accent === a ? 'primary' : 'ghost'}`} style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => update({ accent: a })}>{a}</button>
           ))}
+        </div>
+      </div>
+
+      {/* Experience */}
+      <div className="glass" style={{ padding: 14, marginBottom: 12 }}>
+        <div style={{ fontWeight: 600, marginBottom: 10 }}>Experience</div>
+        <div className="row" style={{ justifyContent: 'space-between', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Volume2 size={15} style={{ color: 'var(--purple-2)' }} />
+            <div>
+              <div style={{ fontSize: 12.5 }}>Interface sounds</div>
+              <div style={{ fontSize: 10.5, color: 'var(--text-3)' }}>Tiny synthesized clicks, sends, and reply chimes</div>
+            </div>
+          </div>
+          <Toggle
+            label="Interface sounds"
+            on={!!settings.soundEffects}
+            onChange={() => { playTap(); update({ soundEffects: !settings.soundEffects }) }}
+          />
+        </div>
+        <div className="row" style={{ justifyContent: 'space-between', gap: 10, marginTop: 12 }}>
+          <div>
+            <div style={{ fontSize: 12.5 }}>Reduced motion</div>
+            <div style={{ fontSize: 10.5, color: 'var(--text-3)' }}>Turns off page transitions and robot tracking</div>
+          </div>
+          <Toggle
+            label="Reduced motion"
+            on={!!settings.reducedMotion}
+            onChange={() => { playTap(); update({ reducedMotion: !settings.reducedMotion }) }}
+          />
         </div>
       </div>
 
