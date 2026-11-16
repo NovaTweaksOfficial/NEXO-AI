@@ -99,6 +99,59 @@ function validEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) && email.length <= 254
 }
 
+// ------------------------------------------------------------ usage tracking
+// Cloudflare's free Workers AI allocation is 10,000 neurons per account per
+// UTC day. This is an estimate based on published per-model token rates; the
+// definitive number is metered by Cloudflare, so the UI labels it as an estimate.
+const FREE_NEURONS_PER_DAY = 10_000
+const NEURON_RATES = {
+  text: { input: 26_668, output: 204_805 },   // llama-3.3-70b-instruct-fp8-fast
+  vision: { input: 31_876, output: 50_488 },  // mistral-small-3.1-24b-instruct
+}
+
+function utcDay(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function approxTokens(text: string): number {
+  return Math.max(1, Math.ceil((text || '').length / 4))
+}
+
+async function recordUsage(
+  env: Env,
+  replies: number,
+  images: number,
+  neurons: number,
+): Promise<void> {
+  if (replies === 0 && images === 0 && neurons <= 0) return
+  try {
+    await env.DB.prepare(
+      'INSERT INTO usage (day, replies, images, neurons, updated_at) VALUES (?, ?, ?, ?, ?) ' +
+      'ON CONFLICT(day) DO UPDATE SET ' +
+      'replies = replies + excluded.replies, ' +
+      'images = images + excluded.images, ' +
+      'neurons = neurons + excluded.neurons, ' +
+      'updated_at = excluded.updated_at',
+    ).bind(utcDay(), replies, images, neurons, Date.now()).run()
+  } catch { /* accounting is best effort; never block a reply */ }
+}
+
+function textReplyNeurons(messages: any[], replyText: string): number {
+  let chars = 800 // system prompt allowance
+  for (const m of messages) {
+    if (typeof m?.content === 'string') chars += m.content.length
+  }
+  const input = Math.min(20_000, Math.ceil(chars / 4))
+  const output = Math.min(4096, approxTokens(replyText))
+  return (input * NEURON_RATES.text.input + output * NEURON_RATES.text.output) / 1_000_000
+}
+
+function visionNeurons(prompt: string, result: string): number {
+  const input = Math.min(4000, 1000 + approxTokens(prompt))
+  const output = Math.min(512, approxTokens(result))
+  return (input * NEURON_RATES.vision.input + output * NEURON_RATES.vision.output) / 1_000_000
+}
+
 // ---------------------------------------------------------------------- auth
 const SESSION_TTL = 30 * 24 * 60 * 60 * 1000
 
@@ -162,7 +215,9 @@ async function describeImage(env: Env, bytes: Uint8Array, mime: string, question
       temperature: 0.2,
     } as any)
     const text = typeof out === 'string' ? out : out?.response || out?.choices?.[0]?.message?.content || ''
-    return String(text).slice(0, 3000)
+    const result = String(text).slice(0, 3000)
+    if (result) await recordUsage(env, 0, 1, visionNeurons(question, result))
+    return result
   } catch (e: any) {
     console.error('vision failed', e?.message || e)
     return ''
@@ -264,7 +319,11 @@ async function runWorkersAI(
   throw lastError || new Error('NEXUS Core is unavailable')
 }
 
-function relayWorkersAI(stream: ReadableStream, cors: Record<string, string>): Response {
+function relayWorkersAI(
+  stream: ReadableStream,
+  cors: Record<string, string>,
+  onComplete?: (text: string) => Promise<void> | void,
+): Response {
   const { readable, writable } = new TransformStream()
   const writer = writable.getWriter()
   const enc = new TextEncoder()
@@ -272,6 +331,7 @@ function relayWorkersAI(stream: ReadableStream, cors: Record<string, string>): R
     const reader = stream.getReader()
     const dec = new TextDecoder()
     let buf = ''
+    let full = ''
     try {
       while (true) {
         const { done, value } = await reader.read()
@@ -287,7 +347,10 @@ function relayWorkersAI(stream: ReadableStream, cors: Record<string, string>): R
           try {
             const j = JSON.parse(payload)
             const delta = typeof j?.response === 'string' ? j.response : ''
-            if (delta) await writer.write(enc.encode(`data: ${JSON.stringify({ delta })}\n\n`))
+            if (delta) {
+              full += delta
+              await writer.write(enc.encode(`data: ${JSON.stringify({ delta })}\n\n`))
+            }
           } catch { /* ignore */ }
         }
       }
@@ -295,6 +358,7 @@ function relayWorkersAI(stream: ReadableStream, cors: Record<string, string>): R
     } catch {
       await writer.write(enc.encode(`data: ${JSON.stringify({ error: 'Stream interrupted.' })}\n\n`))
     } finally {
+      try { await onComplete?.(full) } catch { /* ignore */ }
       await writer.close()
     }
   })()
@@ -315,6 +379,25 @@ export default {
 
     if (path === '/' || path === '/health' || path === '/api/health') {
       return json({ ok: true, service: 'nexus-ai-backend', accounts: true }, 200, cors)
+    }
+
+    if (path === '/api/usage' && req.method === 'GET') {
+      const day = utcDay()
+      const row: any = await env.DB.prepare(
+        'SELECT replies, images, neurons FROM usage WHERE day = ?',
+      ).bind(day).first()
+      const neurons = Number(row?.neurons || 0)
+      const resetAt = Date.parse(`${day}T00:00:00Z`) + 86_400_000
+      return json({
+        day,
+        replies: Number(row?.replies || 0),
+        images: Number(row?.images || 0),
+        neurons: Math.round(neurons),
+        limit: FREE_NEURONS_PER_DAY,
+        remaining: Math.max(0, Math.round(FREE_NEURONS_PER_DAY - neurons)),
+        resetAt,
+        estimated: true,
+      }, 200, cors)
     }
 
     try {
@@ -594,8 +677,14 @@ export default {
         if (!res) {
           try {
             const outcome = await runWorkersAI(env, chatMessages, settings, stream)
-            if (stream && outcome.stream) return relayWorkersAI(outcome.stream, cors)
-            return json({ text: outcome.text || '' }, 200, cors)
+            if (stream && outcome.stream) {
+              return relayWorkersAI(outcome.stream, cors, async full => {
+                await recordUsage(env, 1, 0, textReplyNeurons(chatMessages, full))
+              })
+            }
+            const text = outcome.text || ''
+            await recordUsage(env, 1, 0, textReplyNeurons(chatMessages, text))
+            return json({ text }, 200, cors)
           } catch {
             return json({ error: 'NEXUS is temporarily unavailable. Please try again in a moment.' }, 503, cors)
           }

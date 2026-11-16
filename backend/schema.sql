@@ -35,3 +35,12 @@ CREATE TABLE IF NOT EXISTS files (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_files_user ON files(user_id);
+
+-- Estimated Cloudflare Workers AI consumption, keyed by UTC day.
+CREATE TABLE IF NOT EXISTS usage (
+  day        TEXT PRIMARY KEY,
+  replies    INTEGER NOT NULL DEFAULT 0,
+  images     INTEGER NOT NULL DEFAULT 0,
+  neurons    REAL NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL
+);

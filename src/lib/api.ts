@@ -45,6 +45,22 @@ export async function apiRequest<T = any>(
   return res.json()
 }
 
+// --------------------------------------------------------------- usage
+export interface UsageInfo {
+  day: string
+  replies: number
+  images: number
+  neurons: number
+  limit: number
+  remaining: number
+  resetAt: number
+  estimated: boolean
+}
+
+export async function fetchUsage(base: string): Promise<UsageInfo> {
+  return apiRequest<UsageInfo>(base, '/api/usage')
+}
+
 // --------------------------------------------------------------- auth
 export async function register(base: string, email: string, password: string) {
   return apiRequest<{ token: string; user: AuthUser }>(base, '/api/auth/register', {

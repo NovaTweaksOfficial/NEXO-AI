@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useSettings } from '@/state/settings'
 import { useChat } from '@/state/chat'
 import { useAuth } from '@/state/auth'
 import { getAdapter } from '@/lib/providers'
-import { Wifi, Check, X, LogOut, UserCircle2, Cloud } from 'lucide-react'
+import { fetchUsage, type UsageInfo } from '@/lib/api'
+import { Wifi, Check, X, LogOut, UserCircle2, Cloud, Activity, RefreshCw } from 'lucide-react'
 
 export function SettingsView() {
   const { settings, update, selectedConfig } = useSettings()
@@ -11,6 +12,21 @@ export function SettingsView() {
   const { status, user, signout, openAuth } = useAuth()
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [testing, setTesting] = useState(false)
+  const [usage, setUsage] = useState<UsageInfo | null>(null)
+  const [usageError, setUsageError] = useState<string | null>(null)
+
+  const refreshUsage = useCallback(async () => {
+    try {
+      setUsageError(null)
+      setUsage(await fetchUsage(settings.backendUrl))
+    } catch {
+      setUsageError('Usage info is unavailable right now.')
+    }
+  }, [settings.backendUrl])
+
+  useEffect(() => {
+    void refreshUsage()
+  }, [refreshUsage])
 
   const testConn = async () => {
     if (!selectedConfig) {
@@ -31,6 +47,15 @@ export function SettingsView() {
     setTestResult(r)
     setTesting(false)
   }
+
+  const usedPct = usage ? Math.min(100, (usage.neurons / usage.limit) * 100) : 0
+  const resetTime = usage
+    ? new Date(usage.resetAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : ''
+  const msLeft = usage ? Math.max(0, usage.resetAt - Date.now()) : 0
+  const hoursLeft = Math.floor(msLeft / 3_600_000)
+  const minsLeft = Math.floor((msLeft % 3_600_000) / 60_000)
+  const timeLeft = hoursLeft > 0 ? `${hoursLeft}h ${minsLeft}m` : `${minsLeft}m`
 
   return (
     <div className="page">
@@ -68,6 +93,43 @@ export function SettingsView() {
           <button className="btn primary" style={{ marginTop: 10 }} onClick={openAuth}>
             Sign in or create account
           </button>
+        )}
+      </div>
+
+      {/* Daily AI usage */}
+      <div className="glass" style={{ padding: 14, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Activity size={16} style={{ color: 'var(--purple-2)' }} />
+            <strong style={{ fontSize: 14 }}>Daily AI usage</strong>
+          </div>
+          <button className="btn ghost" style={{ padding: 4 }} onClick={() => void refreshUsage()} title="Refresh usage">
+            <RefreshCw size={14} />
+          </button>
+        </div>
+        {usageError ? (
+          <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>{usageError}</div>
+        ) : !usage ? (
+          <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 8 }}>Loading…</div>
+        ) : (
+          <>
+            <div style={{ marginTop: 10, height: 8, borderRadius: 99, overflow: 'hidden', background: 'rgba(255,255,255,0.08)' }}>
+              <div style={{
+                height: '100%',
+                width: `${usedPct}%`,
+                borderRadius: 99,
+                background: usedPct > 85 ? 'var(--danger, #ef4444)' : 'var(--purple-2)',
+                transition: 'width 0.3s ease',
+              }} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 7, fontSize: 11.5, color: 'var(--text-3)' }}>
+              <span>{Math.round(usedPct)}% used · {usage.remaining.toLocaleString()} left</span>
+              <span>Resets {resetTime} · {timeLeft}</span>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>
+              ~{usage.replies} repl{usage.replies === 1 ? 'y' : 'ies'} · ~{usage.images} photo{usage.images === 1 ? '' : 's'} today · estimated
+            </div>
+          </>
         )}
       </div>
 
