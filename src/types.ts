@@ -72,6 +72,8 @@ export interface AppSettings {
   fontSize: 'sm' | 'md' | 'lg'
   reducedMotion: boolean
   saveHistory: boolean
+  /** Skip the throttled free engine and use the unlimited-capable route. */
+  unlimitedReplies: boolean
 }
 
 export type TabId = 'home' | 'chat' | 'toolbox' | 'history' | 'settings'

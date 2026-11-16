@@ -30,6 +30,8 @@ export interface ChatOptions {
   signal?: AbortSignal
   onChunk?: (text: string) => void
   attachments?: Attachment[]
+  /** Use the unlimited-capable engine route instead of the throttled free one. */
+  unlimited?: boolean
 }
 
 export interface ProviderAdapter {

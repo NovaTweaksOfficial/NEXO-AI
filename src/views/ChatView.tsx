@@ -261,6 +261,7 @@ export function ChatView() {
         systemPrompt: MODE_PROMPTS[mode],
         signal: ac.signal,
         attachments: imageAttachments,
+        unlimited: settings.unlimitedReplies,
         onChunk: (full) => updateMessage(conv.id, assistantMsg.id, full),
       })
     } catch (e: any) {

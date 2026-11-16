@@ -24,6 +24,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   fontSize: 'md',
   reducedMotion: false,
   saveHistory: true,
+  unlimitedReplies: false,
 }
 
 interface Ctx {

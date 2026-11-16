@@ -421,6 +421,7 @@ export default {
         remaining: Math.max(0, Math.round(FREE_NEURONS_PER_DAY - neurons)),
         resetAt,
         estimated: true,
+        pollenConfigured: !!env.POLLINATIONS_API_KEY,
       }, 200, cors)
     }
 
@@ -602,7 +603,14 @@ export default {
       if (path === '/api/chat' && req.method === 'POST') {
         const body = await parseBody(req)
         const p: ProviderId = validateProvider(body?.provider) ? body.provider : 'pollinations'
-        const key = apiKeyFor(env, p)
+        const configuredKey = apiKeyFor(env, p)
+        const unlimited = body?.unlimited === true && p === 'pollinations'
+        const useKey = unlimited && !!configuredKey
+        // With the toggle on, skip the throttled free request entirely: use the
+        // keyed endpoint when a pollen key exists, otherwise go straight to the
+        // Workers AI fallback so replies aren't delayed by a rejected request.
+        const key = p === 'pollinations' && !useKey ? undefined : configuredKey
+        const skipUpstream = unlimited && !useKey
         const { base, model: upstreamModel } = upstreamFor(p, key, body?.baseUrl, body?.model)
         if (!['custom', 'pollinations', 'workersai'].includes(p) && !key) {
           return json({ error: 'NEXUS Core is not configured on the server.' }, 400, cors)
@@ -684,7 +692,7 @@ export default {
         // Try the configured upstream first; free tiers can be busy or rate
         // limited, so fall back to Cloudflare Workers AI instead of failing.
         let res: Response | null = null
-        if (p !== 'workersai') {
+        if (p !== 'workersai' && !skipUpstream) {
           try {
             res = await fetch(`${base}/chat/completions`, {
               method: 'POST',

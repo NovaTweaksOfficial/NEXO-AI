@@ -55,6 +55,7 @@ export interface UsageInfo {
   remaining: number
   resetAt: number
   estimated: boolean
+  pollenConfigured: boolean
 }
 
 export async function fetchUsage(base: string): Promise<UsageInfo> {
