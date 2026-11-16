@@ -49,14 +49,25 @@ function formatBytes(n: number): string {
 
 function AttachmentImage({ att, token, backend }: { att: Attachment; token: string | null; backend: string }) {
   const [src, setSrc] = useState<string | null>(att.dataUrl || null)
+  const objectUrl = useRef<string | null>(null)
   useEffect(() => {
-    if (src || !att.fileId || !token) return
-    let revoked: string | null = null
+    if (att.dataUrl || !att.fileId || !token) return
+    let cancelled = false
     fetchFileObjectUrl(backend, token, att.fileId)
-      .then(url => { revoked = url; setSrc(url) })
+      .then(url => {
+        if (cancelled) { URL.revokeObjectURL(url); return }
+        objectUrl.current = url
+        setSrc(url)
+      })
       .catch(() => undefined)
-    return () => { if (revoked) URL.revokeObjectURL(revoked) }
-  }, [att.fileId, att.dataUrl, backend, token, src])
+    return () => {
+      cancelled = true
+      if (objectUrl.current) {
+        URL.revokeObjectURL(objectUrl.current)
+        objectUrl.current = null
+      }
+    }
+  }, [att.fileId, att.dataUrl, backend, token])
   if (!src) {
     return (
       <div style={{ width: 120, height: 90, borderRadius: 10, background: 'rgba(255,255,255,0.05)', display: 'grid', placeItems: 'center', fontSize: 11, color: 'var(--text-3)' }}>
