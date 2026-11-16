@@ -43,7 +43,7 @@ export function apiKeyFor(env: any, p: ProviderId): string | undefined {
     case 'gemini': return env.GEMINI_API_KEY
     case 'openrouter': return env.OPENROUTER_API_KEY
     case 'custom': return env.CUSTOM_API_KEY
-    case 'pollinations': return undefined
+    case 'pollinations': return env.POLLINATIONS_API_KEY
     case 'workersai': return undefined
   }
 }

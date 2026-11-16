@@ -26,7 +26,26 @@ npx wrangler@4 d1 execute nexus-ai-db --local --file=./schema.sql
 npm run dev   # http://127.0.0.1:8787
 ```
 
-## Configure optional secrets
+## Unlimited replies with a pollen key (optional)
+
+By default NEXUS uses Pollinations' **anonymous** API. It needs no signup or key, but it allows only one text reply per ~30–45 seconds per IP and returns HTTP 402 when you exceed it. The Worker detects that and instantly falls back to Cloudflare Workers AI, so users never see the limit — but those fallback replies spend the 10,000-neuron/day free allowance.
+
+"Pollen" is Pollinations' credit system. A registered account gets free Pollen refilled hourly, and a **secret (`sk_`) key has no Pollinations rate limits**. To activate it:
+
+1. Sign in at https://enter.pollinations.ai (GitHub or Google).
+2. Open https://enter.pollinations.ai/keys and create a **secret / server-to-server** key (`sk_...`). Do **not** use a `pk_` app key — those are only app identifiers and return 401 as API keys.
+3. Store it as a Worker secret (never in frontend code or the repo):
+
+```bash
+cd backend
+npx wrangler@4 secret put POLLINATIONS_API_KEY
+```
+
+4. Redeploy: `npm run deploy`.
+
+When the secret is present the Worker automatically switches to `https://gen.pollinations.ai/v1` with the `openai/gpt-oss-20b` model and sends the key as a Bearer token. The throttle disappears, replies stop spending the Cloudflare neuron budget, and the Workers AI fallback is only used for actual outages. Users still enter nothing. If the key's Pollen budget ever runs out, the Worker falls back to Cloudflare automatically.
+
+## Configure other optional secrets
 
 Only needed if you want to use paid provider models beyond the keyless defaults:
 
@@ -63,6 +82,7 @@ Data:
 Chat:
 
 - `POST /api/chat` — `{ provider, model, messages, settings, systemPrompt?, attachments? }`
+- `GET /api/usage` — estimated Workers AI neurons used today, remaining, reset time
 - `GET /health`
 
 CORS defaults to `*`; restrict with the `ALLOWED_ORIGINS` var (comma-separated).

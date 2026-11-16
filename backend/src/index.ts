@@ -16,6 +16,7 @@ export interface Env {
   OPENROUTER_API_KEY?: string
   CUSTOM_API_KEY?: string
   ALLOWED_ORIGINS?: string
+  POLLINATIONS_API_KEY?: string
 }
 
 const NEXUS_IDENTITY =
@@ -274,6 +275,29 @@ async function upstreamError(res: Response, cors: Record<string, string>): Promi
 
 function validateProvider(p: any): p is ProviderId {
   return ['openai', 'anthropic', 'gemini', 'openrouter', 'pollinations', 'workersai', 'custom'].includes(p)
+}
+
+// A Pollinations secret key (a "pollen" key) removes the anonymous per-IP
+// throttle. Keyed requests must go to the current API host and use a keyed
+// model id; no key is ever exposed to the browser.
+const KEYED_POLLINATIONS_BASE = 'https://gen.pollinations.ai/v1'
+const KEYED_POLLINATIONS_MODEL = 'openai/gpt-oss-20b'
+
+function upstreamFor(
+  p: ProviderId,
+  key: string | undefined,
+  requestedBase: any,
+  requestedModel: any,
+): { base: string; model: string } {
+  let base = String(requestedBase || defaultBaseUrl(p) || '').replace(/\/$/, '')
+  let model = String(requestedModel || DEFAULT_MODELS[p]?.[0] || '')
+  if (p === 'pollinations' && key) {
+    base = KEYED_POLLINATIONS_BASE
+    if (!model || ['openai-fast', 'openai', 'gpt-oss-20b', 'gpt-oss'].includes(model)) {
+      model = KEYED_POLLINATIONS_MODEL
+    }
+  }
+  return { base, model }
 }
 
 // ------------------------------------------------------- workers ai engine
@@ -549,8 +573,8 @@ export default {
       if (path === '/api/test') {
         const body = await parseBody(req)
         const p: ProviderId = validateProvider(body?.provider) ? body.provider : 'pollinations'
-        const base = (body?.baseUrl || defaultBaseUrl(p)).replace(/\/$/, '')
         const key = apiKeyFor(env, p)
+        const { base, model: testModel } = upstreamFor(p, key, body?.baseUrl, body?.model)
         if (!['custom', 'pollinations', 'workersai'].includes(p) && !key) {
           return json({ ok: false, message: 'NEXUS Core is not configured on the server.' }, 400, cors)
         }
@@ -558,7 +582,7 @@ export default {
           const res = await fetch(`${base}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: `Bearer ${key}` } : {}) },
-            body: JSON.stringify({ model: body?.model || DEFAULT_MODELS[p][0], messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }),
+            body: JSON.stringify({ model: testModel, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }),
           })
           if (res.ok) return json({ ok: true, message: 'Connection successful.' }, 200, cors)
           return json({ ok: false, message: `HTTP ${res.status}` }, 200, cors)
@@ -579,7 +603,7 @@ export default {
         const body = await parseBody(req)
         const p: ProviderId = validateProvider(body?.provider) ? body.provider : 'pollinations'
         const key = apiKeyFor(env, p)
-        const base = (body?.baseUrl || defaultBaseUrl(p)).replace(/\/$/, '')
+        const { base, model: upstreamModel } = upstreamFor(p, key, body?.baseUrl, body?.model)
         if (!['custom', 'pollinations', 'workersai'].includes(p) && !key) {
           return json({ error: 'NEXUS Core is not configured on the server.' }, 400, cors)
         }
@@ -649,7 +673,7 @@ export default {
 
         const stream = settings.stream !== false && body.stream !== false
         const oaiBody: any = {
-          model,
+          model: upstreamModel,
           messages: chatMessages,
           temperature: settings.temperature,
           max_tokens: settings.maxTokens,

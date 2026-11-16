@@ -16,6 +16,7 @@ database_id = "4ecca581-8cc6-4f6c-afc8-dd34472d5c2a"
 binding = "AI"
 
 # Set provider keys only if you want paid/premium models:
+#   wrangler secret put POLLINATIONS_API_KEY   # removes the free 1-per-45s throttle
 #   wrangler secret put OPENAI_API_KEY
 #   wrangler secret put ANTHROPIC_API_KEY
 #   wrangler secret put GEMINI_API_KEY
