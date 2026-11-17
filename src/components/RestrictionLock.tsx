@@ -1,11 +1,21 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { LogOut } from 'lucide-react'
+import { useAuth } from '@/state/auth'
+import { playTap } from '@/lib/sounds'
 
 // Full-screen hold. Nothing else in the app is rendered while this is up, and
-// the server enforces the same restriction on every API request (including
-// sign-out), so closing or restarting the app does not restore access.
+// the server enforces the same restriction on every API request. The only
+// action offered is signing out, so a restricted user can return to the
+// sign-in / create-account screen without being trapped in the app.
 export function RestrictionLock({ message }: { message: string }) {
+  const { signout } = useAuth()
+  const [busy, setBusy] = useState(false)
+
   useEffect(() => {
     const blockKeys = (e: KeyboardEvent) => {
+      // Keep the rest of the app unreachable, but leave Tab / Enter / Space
+      // working so the sign-out button stays keyboard accessible.
+      if (e.key === 'Tab' || e.key === 'Enter' || e.key === ' ') return
       e.preventDefault()
       e.stopImmediatePropagation()
     }
@@ -46,7 +56,31 @@ export function RestrictionLock({ message }: { message: string }) {
         cursor: 'default',
       }}
     >
-      <p style={{ maxWidth: 520, margin: 0 }}>{message}</p>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24, maxWidth: 520 }}>
+        <p style={{ margin: 0 }}>{message}</p>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            playTap()
+            setBusy(true)
+            void signout().finally(() => setBusy(false))
+          }}
+          style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            padding: '11px 20px', borderRadius: 12, cursor: 'pointer',
+            border: '1px solid var(--border, rgba(139,92,246,0.3))',
+            background: 'rgba(139,92,246,0.14)', color: 'var(--text, #ecebf6)',
+            fontSize: 14, fontWeight: 700, fontFamily: 'inherit',
+            transition: 'background 0.15s, border-color 0.15s',
+          }}
+        >
+          <LogOut size={16} /> {busy ? 'Signing out…' : 'Sign out'}
+        </button>
+        <span style={{ fontSize: 11.5, color: 'var(--text-3, #6f6b88)', lineHeight: 1.5 }}>
+          Signing out returns you to the sign-in screen, where you can sign in or create an account.
+        </span>
+      </div>
     </div>
   )
 }

@@ -152,6 +152,32 @@ export async function deleteMemory(base: string, token: string, id: string) {
   return apiRequest(base, `/api/memory/${encodeURIComponent(id)}`, { method: 'DELETE', token })
 }
 
+// ------------------------------------------------------------ progression
+export interface SyncedProgress {
+  xp: number
+  streak: number
+  longestStreak: number
+  lastDay: string | null
+  lastClaimDay: string | null
+  stats: Record<string, number>
+  achievements: Record<string, number>
+  events: Record<string, boolean>
+  daily: { day: string; quests: Record<string, number> }
+  modes: string[]
+  arcadeBest: number
+  reactions: Record<string, string>
+  lastAction?: string
+  updatedAt: number
+}
+
+export async function fetchProgress(base: string, token: string): Promise<{ progress: SyncedProgress | null }> {
+  return apiRequest(base, '/api/progress', { token })
+}
+
+export async function saveProgress(base: string, token: string, progress: SyncedProgress) {
+  return apiRequest(base, '/api/progress', { method: 'PUT', token, body: { progress } })
+}
+
 // --------------------------------------------------------------- files
 export async function uploadFile(
   base: string,

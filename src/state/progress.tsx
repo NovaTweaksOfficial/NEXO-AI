@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { load, remove, save } from '@/lib/storage'
+import { fetchProgress, saveProgress, type SyncedProgress } from '@/lib/api'
 import { useAuth } from './auth'
 import { useSettings } from './settings'
 import {
@@ -34,6 +35,8 @@ export interface ProgressState {
   arcadeBest: number
   reactions: Record<string, string>
   lastAction?: LastAction
+  /** Last local change. Used to pick the newest copy across devices. */
+  updatedAt: number
 }
 
 export interface Celebration {
@@ -59,6 +62,8 @@ interface Ctx {
   state: ProgressState
   level: LevelInfo
   celebrations: Celebration[]
+  /** True when signed-in progress has been reconciled with the server. */
+  synced: boolean
   dismiss: (id: string) => void
   award: (eventId: string, xp: number, opts?: AwardOptions) => void
   claimDaily: () => void
@@ -83,6 +88,7 @@ function freshState(): ProgressState {
     modes: [],
     arcadeBest: 0,
     reactions: {},
+    updatedAt: 0,
   }
 }
 
@@ -108,38 +114,115 @@ function normalize(raw: Partial<ProgressState> | null): ProgressState {
     arcadeBest: Math.max(0, Math.floor(Number(raw.arcadeBest) || 0)),
     reactions: { ...(raw.reactions || {}) },
     lastAction: raw.lastAction,
+    updatedAt: Math.max(0, Math.floor(Number(raw.updatedAt) || 0)),
   }
+}
+
+// Two devices can both have a copy. XP only goes up, so it is the strongest
+// version signal; updatedAt breaks ties. Merging keeps achievements and event
+// ids from both copies so a device switch never awards the same XP twice.
+function mergeStates(local: ProgressState, remote: ProgressState): ProgressState {
+  const stats = { ...local.stats }
+  for (const key of STAT_KEYS) stats[key] = Math.max(local.stats[key], remote.stats[key])
+  const dailyQuests = { ...local.daily.quests }
+  if (local.daily.day === remote.daily.day) {
+    for (const [id, value] of Object.entries(remote.daily.quests)) {
+      dailyQuests[id] = Math.max(dailyQuests[id] || 0, value)
+    }
+  }
+  return normalize({
+    xp: Math.max(local.xp, remote.xp),
+    streak: Math.max(local.streak, remote.streak),
+    longestStreak: Math.max(local.longestStreak, remote.longestStreak),
+    lastDay: remote.updatedAt >= local.updatedAt ? remote.lastDay : local.lastDay,
+    lastClaimDay: remote.lastClaimDay || local.lastClaimDay,
+    stats,
+    achievements: { ...local.achievements, ...remote.achievements },
+    events: { ...local.events, ...remote.events },
+    daily: {
+      day: remote.updatedAt >= local.updatedAt ? remote.daily.day : local.daily.day,
+      quests: dailyQuests,
+    },
+    modes: Array.from(new Set([...local.modes, ...remote.modes])),
+    arcadeBest: Math.max(local.arcadeBest, remote.arcadeBest),
+    reactions: { ...local.reactions, ...remote.reactions },
+    lastAction: remote.lastAction || local.lastAction,
+    updatedAt: Math.max(local.updatedAt, remote.updatedAt, Date.now()),
+  })
 }
 
 export function ProgressProvider({ children }: { children: ReactNode }) {
   const { settings } = useSettings()
-  const { status, user } = useAuth()
+  const { status, user, token } = useAuth()
   const identity = status === 'signedIn' && user ? user.id : status === 'guest' ? 'guest' : null
   const key = identity ? `progress.${identity}` : null
+  const isAccount = key !== null && key !== 'progress.guest'
 
   const [state, setState] = useState<ProgressState>(freshState)
   const [loadedKey, setLoadedKey] = useState<string | null>(null)
   const [celebrations, setCelebrations] = useState<Celebration[]>([])
+  const [synced, setSynced] = useState(false)
   const stateRef = useRef(state)
   const awardedRef = useRef<Set<string>>(new Set())
+  const tokenRef = useRef(token)
+  const backendRef = useRef(settings.backendUrl)
+  const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   stateRef.current = state
+  tokenRef.current = token
+  backendRef.current = settings.backendUrl
 
   // Progress is scoped per identity, exactly like conversations. Switching
-  // accounts never mixes XP, streaks, badges, or message stickers.
+  // accounts never mixes XP, streaks, badges, or message stickers. Signed-in
+  // progress is reconciled with the account copy on D1 so it follows the user
+  // to every device; guests keep their copy in localStorage only.
   useEffect(() => {
     if (!key || loadedKey === key) return
     setLoadedKey(key)
-    const next = normalize(load<Partial<ProgressState>>(key, freshState()))
-    stateRef.current = next
-    awardedRef.current = new Set(Object.keys(next.events))
-    setCelebrations([])
-    setState(next)
-  }, [key, loadedKey])
+    setSynced(false)
+    const local = normalize(load<Partial<ProgressState>>(key, freshState()))
+
+    const adopt = (next: ProgressState) => {
+      stateRef.current = next
+      awardedRef.current = new Set(Object.keys(next.events))
+      setCelebrations([])
+      setState(next)
+    }
+
+    if (!isAccount || !tokenRef.current) {
+      adopt(local)
+      setSynced(true)
+      return
+    }
+
+    let cancelled = false
+    void fetchProgress(backendRef.current, tokenRef.current)
+      .then(({ progress }) => {
+        if (cancelled) return
+        const remote = progress ? normalize(progress as Partial<ProgressState>) : null
+        adopt(remote ? mergeStates(local, remote) : local)
+        setSynced(true)
+      })
+      .catch(() => {
+        // Offline or server error: stay usable with the local copy. The next
+        // mutation will retry the push once the account is reachable again.
+        if (cancelled) return
+        adopt(local)
+        setSynced(true)
+      })
+    return () => { cancelled = true }
+  }, [key, loadedKey, isAccount])
 
   useEffect(() => {
     if (!key || loadedKey !== key) return
     save(key, state)
-  }, [state, key, loadedKey])
+    if (!isAccount || !synced || !tokenRef.current) return
+    if (pushTimer.current) clearTimeout(pushTimer.current)
+    const currentToken = tokenRef.current
+    pushTimer.current = setTimeout(() => {
+      void saveProgress(backendRef.current, currentToken, state as SyncedProgress).catch(() => {})
+    }, 700)
+    return () => { if (pushTimer.current) clearTimeout(pushTimer.current) }
+  }, [state, key, loadedKey, isAccount, synced])
 
   const pushCelebrations = useCallback((items: Celebration[]) => {
     if (!items.length || !settings.funMode) return
@@ -220,6 +303,7 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
       arcadeBest: opts.arcadeBest !== undefined ? Math.max(prev.arcadeBest, opts.arcadeBest) : prev.arcadeBest,
       reactions: opts.reactions || prev.reactions,
       lastAction: opts.lastAction || prev.lastAction,
+      updatedAt: Date.now(),
     }
     stateRef.current = next
     setState(next)
@@ -285,7 +369,7 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
     playReact()
 
     if (current || !settings.funMode) {
-      const next = { ...prev, reactions }
+      const next = { ...prev, reactions, updatedAt: Date.now() }
       stateRef.current = next
       setState(next)
       return
@@ -315,7 +399,7 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const reset = useCallback(() => {
-    const next = freshState()
+    const next = { ...freshState(), updatedAt: Date.now() }
     stateRef.current = next
     awardedRef.current.clear()
     setCelebrations([])
@@ -328,13 +412,14 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
     state,
     level,
     celebrations,
+    synced,
     dismiss,
     award,
     claimDaily,
     toggleReaction,
     recordArcade,
     reset,
-  }), [state, level, celebrations, dismiss, award, claimDaily, toggleReaction, recordArcade, reset])
+  }), [state, level, celebrations, synced, dismiss, award, claimDaily, toggleReaction, recordArcade, reset])
 
   return <ProgressCtx.Provider value={value}>{children}</ProgressCtx.Provider>
 }

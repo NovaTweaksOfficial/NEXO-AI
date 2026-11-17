@@ -94,3 +94,11 @@ CREATE TABLE IF NOT EXISTS memories (
   UNIQUE (user_id, label)
 );
 CREATE INDEX IF NOT EXISTS idx_memories_user ON memories(user_id, updated_at DESC);
+
+-- Signed-in progression so levels, badges, streaks, and stickers follow the
+-- account across devices. Guests keep the same data in localStorage only.
+CREATE TABLE IF NOT EXISTS progress (
+  user_id    TEXT PRIMARY KEY,
+  data       TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);

@@ -39,7 +39,7 @@ export function SettingsView() {
   const { settings, update, selectedConfig } = useSettings()
   const { clearAll, resetLocal, syncedCount, syncing } = useChat()
   const { status, user, token, signout, openAuth } = useAuth()
-  const { state: progress, level, reset } = useProgress()
+  const { state: progress, level, synced: progressSynced, reset } = useProgress()
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [testing, setTesting] = useState(false)
   const [usage, setUsage] = useState<UsageInfo | null>(null)
@@ -377,8 +377,18 @@ export function SettingsView() {
           <strong style={{ fontSize: 14 }}>Fun & progress</strong>
         </div>
         <div style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '6px 0 10px', lineHeight: 1.5 }}>
-          XP, streaks, badges, quests, and message stickers are stored locally for this identity. Nothing is sent to a server.
+          {status === 'signedIn'
+            ? 'XP, streaks, badges, quests, and message stickers are saved to your account, so they follow you to every device.'
+            : 'Guests keep XP, streaks, badges, quests, and stickers on this device only. Sign in to sync them across devices.'}
         </div>
+        {status === 'signedIn' && (
+          <div className="row" style={{ gap: 6, margin: '0 0 12px' }}>
+            <Cloud size={13} style={{ color: progressSynced ? 'var(--success)' : 'var(--text-3)' }} />
+            <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
+              {progressSynced ? 'Account sync active' : 'Syncing with your account…'}
+            </span>
+          </div>
+        )}
         <div className="home-stats" style={{ marginBottom: 12 }}>
           <div><strong>{level.level}</strong><span>level</span></div>
           <div><strong>{progress.xp}</strong><span>XP</span></div>
@@ -417,7 +427,9 @@ export function SettingsView() {
           className="btn danger"
           style={{ marginTop: 12 }}
           onClick={() => {
-            if (confirm('Reset local XP, streaks, badges, quests, and stickers? Your chats are not affected.')) {
+            if (confirm(status === 'signedIn'
+              ? 'Reset XP, streaks, badges, quests, and stickers on this account across all devices? Your chats are not affected.'
+              : 'Reset local XP, streaks, badges, quests, and stickers? Your chats are not affected.')) {
               playTap()
               reset()
             }

@@ -531,7 +531,7 @@ async function createSafetyHold(
     type: 'timeout',
     reason: `NEXUS Safety: ${flag}`,
     by: 'NEXUS Safety',
-    expiresAt: Date.now() + 7 * 86_400_000,
+    expiresAt: moderationExpiry('timeout', 168),
     status: 'pending',
   })
   await createAlert(
@@ -575,16 +575,32 @@ async function screenReply(
   return { kind: 'response', response: json({ error: view.message, moderation: view }, 403, cors) }
 }
 
+// Owner-controlled duration policy. Timeout is capped at one week, soft ban at
+// one year, and a full ban (like an IP ban) never expires. The console shows
+// the same limits, but the server clamps again so a tampered client cannot
+// extend a restriction.
+const TIMEOUT_MAX_HOURS = 168 // 7 days
+const SOFT_BAN_MAX_HOURS = 8760 // 365 days
+
+function moderationExpiry(type: string, hoursInput: any, now = Date.now()): number | null {
+  if (type === 'ban' || type === 'ip_ban') return null
+  const max = type === 'timeout' ? TIMEOUT_MAX_HOURS : SOFT_BAN_MAX_HOURS
+  const hours = Math.max(1, Math.min(max, Math.floor(Number(hoursInput) || 24)))
+  return now + hours * 3_600_000
+}
+
 function restrictionView(mod: ModerationRow) {
   const pending = mod.status === 'pending'
   // This is the only text a restricted user ever sees in the app.
   const message = pending
     ? 'Your message has been sent to the owner. Your access stays restricted until they accept or decline.'
     : mod.type === 'ip_ban'
-      ? 'This device’s IP address is banned from NEXUS. The owner must revoke this restriction.'
+      ? 'This device’s IP address is banned from NEXUS. Only the owner can revoke this restriction.'
       : mod.type === 'ban'
-        ? 'Your account is banned from NEXUS. The owner must revoke this restriction.'
-        : 'Your account is restricted. The owner must revoke this restriction.'
+        ? 'Your account is permanently banned from NEXUS. Only the owner can revoke this restriction.'
+        : mod.type === 'timeout'
+          ? 'Your account is timed out. Access returns automatically when the timeout ends.'
+          : 'Your account is restricted. Access returns automatically when the restriction ends.'
   return {
     type: mod.type,
     status: mod.status,
@@ -1192,6 +1208,44 @@ async function callChatUpstream(
   }
 }
 
+// Progression is user-owned cosmetic data. Keep the shape sane and bounded so
+// a tampered client cannot bloat D1 or inject anything meaningful.
+function sanitizeProgress(raw: any): any | null {
+  if (!raw || typeof raw !== 'object') return null
+  const num = (v: any, max = 1_000_000) => Math.min(max, Math.max(0, Math.floor(Number(v) || 0)))
+  const text = (v: any, max = 200) => typeof v === 'string' ? v.slice(0, max) : ''
+  const stats = ['messages', 'images', 'tools', 'reactions', 'arcade', 'night', 'modes']
+  const cleanStats: Record<string, number> = {}
+  for (const key of stats) cleanStats[key] = num(raw.stats?.[key])
+  const records = (v: any, maxValues = 200) => {
+    const out: Record<string, any> = {}
+    if (!v || typeof v !== 'object') return out
+    for (const [k, val] of Object.entries(v).slice(0, 200)) {
+      if (k.length <= 100) out[k] = typeof val === 'number' ? num(val) : text(val, maxValues)
+    }
+    return out
+  }
+  return {
+    xp: num(raw.xp),
+    streak: num(raw.streak, 3650),
+    longestStreak: num(raw.longestStreak, 3650),
+    lastDay: text(raw.lastDay, 20) || null,
+    lastClaimDay: text(raw.lastClaimDay, 20) || null,
+    stats: cleanStats,
+    achievements: records(raw.achievements, 40),
+    events: records(raw.events, 120),
+    daily: {
+      day: text(raw.daily?.day, 20),
+      quests: records(raw.daily?.quests, 40),
+    },
+    modes: Array.isArray(raw.modes) ? raw.modes.filter((m: any) => typeof m === 'string').slice(0, 20).map((m: string) => m.slice(0, 40)) : [],
+    arcadeBest: num(raw.arcadeBest, 1000),
+    reactions: records(raw.reactions, 20),
+    lastAction: text(raw.lastAction, 20) || undefined,
+    updatedAt: num(raw.updatedAt, 9_000_000_000_000_000),
+  }
+}
+
 // ------------------------------------------------------------------- worker
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
@@ -1575,6 +1629,35 @@ export default {
         return json({ ok: true }, 200, cors)
       }
 
+      // ---------------------------------------------------------- progress
+      if (path === '/api/progress' && req.method === 'GET') {
+        const user = await getUser(req, env)
+        if (!user) return json({ error: 'Not signed in.' }, 401, cors)
+        const row: any = await env.DB.prepare(
+          'SELECT data FROM progress WHERE user_id = ?',
+        ).bind(user.id).first()
+        let progress: any = null
+        if (row?.data) {
+          try { progress = sanitizeProgress(JSON.parse(row.data)) } catch { progress = null }
+        }
+        return json({ progress }, 200, cors)
+      }
+
+      if (path === '/api/progress' && req.method === 'PUT') {
+        const user = await getUser(req, env)
+        if (!user) return json({ error: 'Not signed in.' }, 401, cors)
+        const body = await parseBody(req)
+        const progress = sanitizeProgress(body?.progress)
+        if (!progress) return json({ error: 'Invalid progress data.' }, 400, cors)
+        const serialized = JSON.stringify(progress)
+        if (serialized.length > 250_000) return json({ error: 'Progress is too large.' }, 413, cors)
+        await env.DB.prepare(
+          'INSERT INTO progress (user_id, data, updated_at) VALUES (?, ?, ?) ' +
+          'ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at',
+        ).bind(user.id, serialized, progress.updatedAt || Date.now()).run()
+        return json({ ok: true, updatedAt: progress.updatedAt || Date.now() }, 200, cors)
+      }
+
       // -------------------------------------------------------------- test
       if (path === '/api/test') {
         const body = await parseBody(req)
@@ -1686,8 +1769,7 @@ export default {
           userId = found.id
           email = found.email
         }
-        const hours = Math.max(1, Math.min(720, Math.floor(Number(body?.hours) || 24)))
-        const expiresAt = type === 'timeout' ? Date.now() + hours * 3_600_000 : null
+        const expiresAt = moderationExpiry(type, body?.hours)
         const moderation = await createModeration(env, {
           userId, email, ip, ipHash: ipHashOverride, type, reason, by: owner.email, expiresAt,
         })
@@ -1756,8 +1838,7 @@ export default {
         if (type !== 'ip_ban' && !row.target_user_id) {
           return json({ error: 'That target has no account. Use IP ban for guests.' }, 400, cors)
         }
-        const hours = Math.max(1, Math.min(720, Math.floor(Number(body?.hours) || 24)))
-        const expiresAt = type === 'timeout' ? Date.now() + hours * 3_600_000 : null
+        const expiresAt = moderationExpiry(type, body?.hours)
         const now = Date.now()
         await env.DB.prepare(
           'UPDATE moderation SET type = ?, reason = ?, status = ?, expires_at = ?, created_by = ?, created_at = ? WHERE id = ?',

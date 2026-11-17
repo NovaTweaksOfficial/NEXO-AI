@@ -13,7 +13,7 @@ const ModerationCtx = createContext<Ctx | null>(null)
 
 export function ModerationProvider({ children }: { children: ReactNode }) {
   const { settings } = useSettings()
-  const { token } = useAuth()
+  const { token, status } = useAuth()
   const [restriction, setRestriction] = useState<Restriction | null>(null)
   const [checking, setChecking] = useState(true)
 
@@ -31,11 +31,19 @@ export function ModerationProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false
+    // A signed-out user is looking at the auth screen, so drop any lock left
+    // over from the previous account immediately instead of waiting for the
+    // next poll. Account bans are re-applied as soon as they sign back in.
+    if (status === 'signedOut') {
+      setRestriction(null)
+      setChecking(false)
+      return
+    }
     setChecking(true)
     void refresh().then(() => { if (!cancelled) setChecking(false) })
     const timer = setInterval(() => { void refresh() }, 8000)
     return () => { cancelled = true; clearInterval(timer) }
-  }, [refresh])
+  }, [refresh, status])
 
   return (
     <ModerationCtx.Provider value={{ restriction, checking, refresh }}>

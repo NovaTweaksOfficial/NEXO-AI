@@ -48,7 +48,7 @@ npm run preview
 
 ## Fun, progress, and shortcuts
 
-- **Operator progress:** real replies, images, tool runs, and reactions earn local XP. Levels, daily streaks, best streak, and lifetime stats are stored per identity (guest or account) on the device. Nothing about progress is sent to a server.
+- **Operator progress:** real replies, images, tool runs, and reactions earn XP. Levels, daily streaks, best streak, badges, quests, and message stickers are scoped per identity. Signed-in progress is merged with an account copy on D1 and follows the user across devices; guests keep theirs on the device only.
 - **Daily quests and badges:** four rotating daily quests and 15 achievement badges give short goals without adding chat limits. A daily claim rewards streaks once per day.
 - **Command palette:** press `⌘K` / `Ctrl+K` (or the header button) to jump to tabs, modes, tools, image commands, theme/sound settings, and the daily claim.
 - **Companion:** the robot has moods, reacts to your cursor, and speaks when tapped. It can be turned off in Settings.
@@ -70,7 +70,7 @@ The moderation console is **not part of the NEXUS AI app**. It is a separate pri
 - **Desktop:** a standalone **FL3SH Console** app that opens that private URL. Installers are **not published** on Releases; they stay in `~/FL3SH Private Builds`.
 - Source lives in the private `NovaTweaksOfficial/FL3SH-Console` repository.
 
-It has an AI alert inbox (accept keeps a restriction, decline releases it), soft ban, ban, IP ban, timeout, required reasons, server-side enforcement checks, revoke, and an account list.
+It has an AI alert inbox (accept keeps a restriction, decline releases it), soft ban, ban, IP ban, timeout, required reasons, server-side enforcement checks, revoke, and an account list. **Duration policy:** timeout is capped at one week, soft ban at one year, and ban / IP ban are permanent. The server clamps every duration even if a client sends a larger value. Restricted users see a single full-screen message with a **Sign out** button so they can return to the sign-in / create-account screen.
 
 **Alert tiers:** only **extreme** requests (sexual content, violence/self-harm, weapons, harm to others) create an enforced restriction and a loud alert in the console. **Medium** and **low** topics — including coding, game/mod-menu questions, and theft talk — create a silent notice in the console with no sound and no restriction. Lower-risk refusals are replaced with a plain status line instead of an apology.
 
