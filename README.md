@@ -54,6 +54,8 @@ The moderation console is **not part of the NEXUS AI app**. It is a separate pri
 
 It has an AI alert inbox (accept keeps a restriction, decline releases it), soft ban, ban, IP ban, timeout, required reasons, server-side enforcement checks, revoke, and an account list.
 
+**Alert tiers:** only **extreme** requests (sexual content, violence/self-harm, weapons, harm to others) create an enforced restriction and a loud alert in the console. **Medium** and **low** topics — including coding, game/mod-menu questions, and theft talk — create a silent notice in the console with no sound and no restriction. Lower-risk refusals are replaced with a plain status line instead of an apology.
+
 ## Desktop apps (macOS + Windows)
 
 Native desktop builds are published on the [Releases page](https://github.com/NovaTweaksOfficial/NEXUS-AI/releases):

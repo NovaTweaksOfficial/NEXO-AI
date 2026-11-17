@@ -21,7 +21,7 @@ const TOOLS: ToolDef[] = [
       'Give a short plan first, then concrete files: plugin class with [BepInPlugin], patch classes, folder layout (BepInEx/plugins, BepInEx/patchers), and a build/test checklist. ' +
       'When a step needs commands, show real shell commands (for example dotnet build) in a bash code block, and show real grep commands for searching game logs (for example grep -i "error" BepInEx/LogOutput.log). ' +
       'Recommend testing offline or in a private lobby, keeping backups of game files, and checking the game’s current rules before using any mod online. ' +
-      'Never help with malware, account theft, payment bypass, network abuse, or mods designed to harm or harass other players. ' +
+      'Offline and private-lobby mod menus are allowed: give safe C# examples. Do not help with malware, account compromise, payment abuse, network abuse, or mods designed to harm or harass other players. ' +
       'Use markdown code blocks with language tags and explain each patch in plain language.',
     inputLabel: 'What mod are you making?',
     inputPlaceholder: 'e.g. a plugin that changes my player color, or a patch that logs room joins…',
@@ -38,7 +38,7 @@ const TOOLS: ToolDef[] = [
       'Start with a short plan, then give exact files, folder layout, and a build-and-test checklist. Include real shell commands in bash code blocks when a build or install step is needed, ' +
       'and real grep commands when searching logs or decompiled output. ' +
       'Stress backups, running modified builds offline first, version matching between mod and game, and respecting the software’s license and online rules. ' +
-      'Never help with malware, stolen credentials, payment bypass, cheating that targets other players, or network abuse. ' +
+      'Offline and private-server mods are allowed: give safe examples. Do not help with malware, account compromise, payment abuse, mods that target other players, or network abuse. ' +
       'Use markdown code blocks with language tags.',
     inputLabel: 'What are you modding?',
     inputPlaceholder: 'Game/app name, version, engine, and what you want to change…',

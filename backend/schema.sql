@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS owner_alerts (
   title         TEXT NOT NULL,
   detail        TEXT NOT NULL,
   status        TEXT NOT NULL,
+  severity      TEXT NOT NULL DEFAULT 'extreme',
   created_at    INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_alerts_status ON owner_alerts(status);
