@@ -4,10 +4,16 @@ import { useChat } from '@/state/chat'
 import { useAuth } from '@/state/auth'
 import { useProgress } from '@/state/progress'
 import { getAdapter } from '@/lib/providers'
-import { fetchUsage, type UsageInfo } from '@/lib/api'
+import {
+  fetchUsage, fetchMemories, saveMemory, deleteMemory,
+  type UsageInfo, type UserMemory,
+} from '@/lib/api'
 import { playTap } from '@/lib/sounds'
 import { RobotIcon } from '@/components/RobotMascot'
-import { Wifi, Check, X, LogOut, UserCircle2, Cloud, Activity, RefreshCw, Zap, Volume2, Trophy, Flame, RotateCcw } from 'lucide-react'
+import {
+  Wifi, Check, X, LogOut, UserCircle2, Cloud, Activity, RefreshCw, Zap, Volume2,
+  Trophy, Flame, RotateCcw, Brain, Plus, Trash2,
+} from 'lucide-react'
 
 function Toggle({ on, onChange, label }: { on: boolean; onChange: () => void; label: string }) {
   return (
@@ -32,12 +38,17 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: () => void; la
 export function SettingsView() {
   const { settings, update, selectedConfig } = useSettings()
   const { clearAll, resetLocal, syncedCount, syncing } = useChat()
-  const { status, user, signout, openAuth } = useAuth()
+  const { status, user, token, signout, openAuth } = useAuth()
   const { state: progress, level, reset } = useProgress()
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [testing, setTesting] = useState(false)
   const [usage, setUsage] = useState<UsageInfo | null>(null)
   const [usageError, setUsageError] = useState<string | null>(null)
+  const [memories, setMemories] = useState<UserMemory[]>([])
+  const [memoryLabel, setMemoryLabel] = useState('')
+  const [memoryValue, setMemoryValue] = useState('')
+  const [memoryBusy, setMemoryBusy] = useState(false)
+  const [memoryError, setMemoryError] = useState<string | null>(null)
 
   const refreshUsage = useCallback(async () => {
     try {
@@ -51,6 +62,48 @@ export function SettingsView() {
   useEffect(() => {
     void refreshUsage()
   }, [refreshUsage])
+
+  const refreshMemories = useCallback(async () => {
+    if (!token) { setMemories([]); return }
+    try {
+      setMemoryError(null)
+      const data = await fetchMemories(settings.backendUrl, token)
+      setMemories(data.memories || [])
+    } catch {
+      setMemoryError('Memory is unavailable right now.')
+    }
+  }, [settings.backendUrl, token])
+
+  useEffect(() => {
+    void refreshMemories()
+  }, [refreshMemories])
+
+  const addMemory = async () => {
+    if (!token || !memoryLabel.trim() || !memoryValue.trim() || memoryBusy) return
+    playTap()
+    setMemoryBusy(true)
+    try {
+      await saveMemory(settings.backendUrl, token, memoryLabel.trim(), memoryValue.trim())
+      setMemoryLabel('')
+      setMemoryValue('')
+      await refreshMemories()
+    } catch (e: any) {
+      setMemoryError(e?.message || 'Could not save that memory.')
+    } finally {
+      setMemoryBusy(false)
+    }
+  }
+
+  const removeMemory = async (id: string) => {
+    if (!token) return
+    playTap()
+    try {
+      await deleteMemory(settings.backendUrl, token, id)
+      await refreshMemories()
+    } catch (e: any) {
+      setMemoryError(e?.message || 'Could not remove that memory.')
+    }
+  }
 
   const testConn = async () => {
     if (!selectedConfig) {
@@ -372,6 +425,73 @@ export function SettingsView() {
         >
           <RotateCcw size={14} /> Reset progress
         </button>
+      </div>
+
+      {/* NEXUS Memory */}
+      <div className="glass" style={{ padding: 14, marginBottom: 12 }}>
+        <div className="row" style={{ gap: 8 }}>
+          <Brain size={16} style={{ color: 'var(--purple-2)' }} />
+          <strong style={{ fontSize: 14 }}>NEXUS Memory</strong>
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '6px 0 10px', lineHeight: 1.5 }}>
+          {status === 'signedIn'
+            ? 'Save facts you want NEXUS to remember. Stored on your account and sent as context only when relevant. Nothing is inferred from private chats.'
+            : 'Sign in to give NEXUS durable memory. Guests keep chats on this device only.'}
+        </div>
+        {status === 'signedIn' && (
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <input
+                className="input"
+                value={memoryLabel}
+                onChange={e => setMemoryLabel(e.target.value)}
+                placeholder="Short name, e.g. Timezone"
+                maxLength={60}
+                aria-label="Memory name"
+              />
+              <textarea
+                className="textarea"
+                value={memoryValue}
+                onChange={e => setMemoryValue(e.target.value)}
+                placeholder="Detail, e.g. I am in Central time"
+                rows={2}
+                maxLength={800}
+                aria-label="Memory detail"
+              />
+              <button
+                className="btn primary"
+                disabled={memoryBusy || !memoryLabel.trim() || !memoryValue.trim()}
+                onClick={() => void addMemory()}
+              >
+                <Plus size={14} /> {memoryBusy ? 'Saving…' : 'Save memory'}
+              </button>
+            </div>
+            {memoryError && <div style={{ color: 'var(--danger)', fontSize: 11.5, marginTop: 8 }}>{memoryError}</div>}
+            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {memories.length === 0 && (
+                <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>No memories saved yet.</div>
+              )}
+              {memories.map(m => (
+                <div key={m.id} className="memory-row">
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700 }}>{m.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-2)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                      {m.value}
+                    </div>
+                  </div>
+                  <button
+                    className="btn ghost"
+                    style={{ padding: 6 }}
+                    onClick={() => void removeMemory(m.id)}
+                    aria-label={`Remove ${m.label}`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Privacy */}

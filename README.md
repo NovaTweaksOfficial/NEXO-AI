@@ -38,6 +38,14 @@ npm run preview
 - **Activity labels:** instead of a generic "..." indicator, Chat and Toolbox show what NEXUS is actually doing as it works — `read` / `read image` / `read file` for attachments, `webfetch` then `fetched web search` for live search, `grep` when relevant snippets are selected, `coding` or `write` for the reply, `shell` when real command steps appear in the answer, and `edit` / `generate` for image commands. Labels come from real Worker steps, never simulated tool calls.
 - **Modding help:** Toolbox includes **Gorilla Tag Mods** and **MODS (General)**. They produce the finished mod files — complete C# classes, patches, project file, and folder layout — instead of a lesson. Large build requests use the full output budget, and if the reply hits the model's cap NEXUS automatically continues until the deliverable is complete. Offline/private testing is emphasized.
 
+## NEXUS Core upgrade
+
+- **Core protocol:** every reply is guided by an internal quality checklist for intent, usefulness, factual honesty, self-checking, and clean delivery. The checklist is never shown or mentioned to users.
+- **Artifact quality gate:** build requests get the full output budget, automatic continuation when output is capped, a repair pass when a reply stops inside a code fence or filename header, and a forced artifact-only redelivery if the model drifts into a tutorial.
+- **Smarter research:** live-search triggers include current, shopping, comparison, review, and identification questions. Results stay untrusted context with exact-URL citations, and a no-results search makes NEXUS admit it could not verify live.
+- **Stronger vision:** image analysis transcribes visible text and error messages, identifies objects/brands/models, and labels guesses as guesses.
+- **NEXUS Memory:** signed-in users can explicitly save up to 30 durable facts in Settings. Memories are scoped to the account, editable, and injected as context only; NEXUS never infers or stores memories from private chats.
+
 ## Fun, progress, and shortcuts
 
 - **Operator progress:** real replies, images, tool runs, and reactions earn local XP. Levels, daily streaks, best streak, and lifetime stats are stored per identity (guest or account) on the device. Nothing about progress is sent to a server.

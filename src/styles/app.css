@@ -408,6 +408,11 @@ html[data-motion='off'] *::after {
 }
 .arcade-card:hover { border-color: var(--border-strong); }
 .tool-xp { font-size: 9px; font-weight: 800; color: var(--purple-2); white-space: nowrap; }
+.memory-row {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 9px 10px; border-radius: 12px;
+  border: 1px solid var(--border); background: rgba(255, 255, 255, 0.035);
+}
 .chat-level-pill {
   font-size: 10px; font-weight: 800; padding: 4px 8px; border-radius: 99px;
   color: var(--purple-2); background: rgba(139, 92, 246, 0.14);

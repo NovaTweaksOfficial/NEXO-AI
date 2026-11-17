@@ -132,6 +132,26 @@ export async function deleteConversation(base: string, token: string, id: string
   return apiRequest(base, `/api/conversations/${id}`, { method: 'DELETE', token })
 }
 
+// --------------------------------------------------------------- memory
+export interface UserMemory {
+  id: string
+  label: string
+  value: string
+  updatedAt: number
+}
+
+export async function fetchMemories(base: string, token: string): Promise<{ memories: UserMemory[] }> {
+  return apiRequest(base, '/api/memory', { token })
+}
+
+export async function saveMemory(base: string, token: string, label: string, value: string) {
+  return apiRequest(base, '/api/memory', { method: 'POST', token, body: { label, value } })
+}
+
+export async function deleteMemory(base: string, token: string, id: string) {
+  return apiRequest(base, `/api/memory/${encodeURIComponent(id)}`, { method: 'DELETE', token })
+}
+
 // --------------------------------------------------------------- files
 export async function uploadFile(
   base: string,
