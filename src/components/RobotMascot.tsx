@@ -120,10 +120,10 @@ export function RobotMascot({ size = 96, className = '', trackCursor = false }: 
 
         {/* antenna: pulses brighter when the cursor is near */}
         <line x1="60" y1="14" x2="60" y2="26" stroke="#8b5cf6" strokeWidth="2" filter={`url(#${ids.softGlow})`} />
-        <motion.circle
-          cx="60" cy="12" r="4" fill={`url(#${ids.eyeGlow})`} filter={`url(#${ids.glow})`}
-          animate={{ r: near ? 5.6 : 4, opacity: near ? 1 : 0.85 }}
-          transition={spring}
+        <circle
+          cx="60" cy="12" r={near ? 5.6 : 4} fill={`url(#${ids.eyeGlow})`} filter={`url(#${ids.glow})`}
+          opacity={near ? 1 : 0.85}
+          style={{ transition: 'r 180ms ease-out' }}
         />
         {near && (
           <circle cx="60" cy="12" r="9" fill="none" stroke="#a78bfa" strokeWidth="0.8" opacity="0.55">
@@ -151,33 +151,20 @@ export function RobotMascot({ size = 96, className = '', trackCursor = false }: 
           <g filter={`url(#${ids.glow})`}>
             <rect x="38" y="50" width="16" height="12" rx="4" fill={`url(#${ids.eyeGlow})`} opacity="0.55" />
             <rect x="66" y="50" width="16" height="12" rx="4" fill={`url(#${ids.eyeGlow})`} opacity="0.55" />
-            <motion.circle
-              cx="46" cy="56" r="4.5" fill="#c4b5fd"
-              animate={{ cx: 46 + look.x * 5, cy: 56 + look.y * 3.5, r: blink ? 0.6 : 4.5 }}
-              transition={spring}
-            />
-            <motion.circle
-              cx="74" cy="56" r="4.5" fill="#c4b5fd"
-              animate={{ cx: 74 + look.x * 5, cy: 56 + look.y * 3.5, r: blink ? 0.6 : 4.5 }}
-              transition={spring}
-            />
+            <g style={{ transform: `translate(${look.x * 5}px, ${look.y * 3.5}px)`, transition: 'transform 120ms ease-out' }}>
+              <circle cx="46" cy="56" r={blink ? 0.6 : 4.5} fill="#c4b5fd" />
+              <circle cx="74" cy="56" r={blink ? 0.6 : 4.5} fill="#c4b5fd" />
+            </g>
           </g>
-          <motion.rect
-            x="40" y="52" width="6" height="3" rx="1.5" fill="#fff" opacity="0.7"
-            animate={{ x: 40 + look.x * 5, y: 52 + look.y * 3.5, opacity: blink ? 0 : 0.7 }}
-            transition={spring}
-          />
-          <motion.rect
-            x="68" y="52" width="6" height="3" rx="1.5" fill="#fff" opacity="0.7"
-            animate={{ x: 68 + look.x * 5, y: 52 + look.y * 3.5, opacity: blink ? 0 : 0.7 }}
-            transition={spring}
-          />
+          <g style={{ transform: `translate(${look.x * 5}px, ${look.y * 3.5}px)`, transition: 'transform 120ms ease-out' }}>
+            <rect x="40" y="52" width="6" height="3" rx="1.5" fill="#fff" opacity={blink ? 0 : 0.7} />
+            <rect x="68" y="52" width="6" height="3" rx="1.5" fill="#fff" opacity={blink ? 0 : 0.7} />
+          </g>
 
           {/* mouth reacts to cursor: a small smile when noticed */}
-          <motion.rect
-            x="46" y="70" width="28" height="4" rx="2" fill="#8b5cf6"
-            animate={{ width: near ? 34 : 28, x: near ? 43 : 46, opacity: near ? 1 : 0.8 }}
-            transition={spring}
+          <rect
+            x={near ? 43 : 46} y="70" width={near ? 34 : 28} height="4" rx="2" fill="#8b5cf6"
+            opacity={near ? 1 : 0.8}
           />
 
           {/* side bolts */}
