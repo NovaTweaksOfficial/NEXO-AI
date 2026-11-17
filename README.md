@@ -41,6 +41,13 @@ The AI is white-labeled as **NEXUS** / **NEXUS Core** in both the app and the se
 
 See `backend/README.md`. Live URL: `https://nexus-ai-backend.nexus-ai-backend.workers.dev`.
 
+## FL3SH Console (owner only)
+
+When the owner account is signed in, a **Console** tab appears with:
+- An **AI alerts** inbox — when NEXUS blocks a request (for example an explicit-image request), it creates a hold and an alert. Accepting keeps the restriction; declining releases it.
+- **Soft ban**, **ban**, **IP ban**, and **timeout**, each requiring a reason. Bans are enforced server-side across all devices and guests.
+- Active restriction list with revoke, and an account list for quick targeting.
+
 ## Desktop apps (macOS + Windows)
 
 Native desktop builds are published on the [Releases page](https://github.com/NovaTweaksOfficial/NEXUS-AI/releases):
