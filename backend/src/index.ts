@@ -337,13 +337,16 @@ async function runImageModel(
 }
 
 /** Turn one generated still into a short animated GIF with a gentle zoom/pan. */
-function makeAnimatedGif(jpegBytes: Uint8Array, frameCount = 6, size = 384, delay = 110): Uint8Array {
+function makeAnimatedGif(jpegBytes: Uint8Array, frameCount = 6, delay = 110): Uint8Array {
   const decoded = jpeg.decode(jpegBytes, { useTArray: true })
+  const size = Math.min(decoded.width, decoded.height, 256)
+  const offsetX = Math.floor((decoded.width - size) / 2)
+  const offsetY = Math.floor((decoded.height - size) / 2)
   const base = new Uint8ClampedArray(size * size * 4)
   for (let y = 0; y < size; y++) {
-    const sy = Math.min(decoded.height - 1, Math.floor(y * decoded.height / size))
+    const sy = offsetY + y
     for (let x = 0; x < size; x++) {
-      const sx = Math.min(decoded.width - 1, Math.floor(x * decoded.width / size))
+      const sx = offsetX + x
       const src = (sy * decoded.width + sx) * 4
       const dst = (y * size + x) * 4
       base[dst] = decoded.data[src]
@@ -372,7 +375,7 @@ function makeAnimatedGif(jpegBytes: Uint8Array, frameCount = 6, size = 384, dela
         frame[dst + 3] = 255
       }
     }
-    const palette = quantize(frame, 128)
+    const palette = quantize(frame, 96)
     const indexed = applyPalette(frame, palette)
     gif.writeFrame(indexed, size, size, { palette, delay })
   }
