@@ -25,6 +25,15 @@ CREATE TABLE IF NOT EXISTS conversations (
 );
 CREATE INDEX IF NOT EXISTS idx_conv_user ON conversations(user_id, updated_at DESC);
 
+-- Deleted conversations stay tombstoned so a stale tab or another device
+-- cannot push the same chat back into the account after it was removed.
+CREATE TABLE IF NOT EXISTS deleted_conversations (
+  user_id        TEXT NOT NULL,
+  conversation_id TEXT NOT NULL,
+  deleted_at     INTEGER NOT NULL,
+  PRIMARY KEY (user_id, conversation_id)
+);
+
 CREATE TABLE IF NOT EXISTS files (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL,

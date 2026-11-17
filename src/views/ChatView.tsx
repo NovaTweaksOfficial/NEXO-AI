@@ -87,7 +87,7 @@ function AttachmentImage({ att, token, backend }: { att: Attachment; token: stri
 
 export function ChatView() {
   const { mode, setMode } = useUi()
-  const { current, newConversation, addMessage, addAttachment, updateMessage, removeMessage, rename } = useChat()
+  const { current, newConversation, select, addMessage, addAttachment, updateMessage, removeMessage, rename } = useChat()
   const { settings, selectedConfig: cfg } = useSettings()
   const { token } = useAuth()
   const [input, setInput] = useState('')
@@ -115,20 +115,15 @@ export function ChatView() {
     }
   }, [])
 
-  // Auto-send a suggested prompt once the conversation exists.
+  // Auto-send a home-screen suggestion once on mount. This runs after the
+  // pending-prompt effect above, and send() creates the conversation itself.
   useEffect(() => {
-    if (current && autoSendRef.current) {
-      const p = autoSendRef.current
-      autoSendRef.current = null
-      send(p)
-    }
+    const p = autoSendRef.current
+    if (!p) return
+    autoSendRef.current = null
+    void send(p)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current])
-
-  // ensure conversation
-  useEffect(() => {
-    if (!current) newConversation(mode)
-  }, [current, newConversation, mode])
+  }, [])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -193,7 +188,6 @@ export function ChatView() {
     const raw = (overrideText ?? input).trim()
     const text = raw || (attachments.length ? 'Describe what is attached.' : '')
     if (!text || streaming) return
-    if (!conv) return
     playSend()
     setError(null)
     setInput('')
@@ -207,13 +201,17 @@ export function ChatView() {
       id: uid(), role: 'user', content: text, createdAt: Date.now(),
       ...(cleanAttachments.length ? { attachments: cleanAttachments } : {}),
     }
-    addMessage(conv.id, userMsg)
-
     const assistantMsg: ChatMessage = { id: uid(), role: 'assistant', content: '', createdAt: Date.now() }
-    addMessage(conv.id, assistantMsg)
 
-    if (conv.messages.length === 0) {
-      rename(conv.id, text.slice(0, 40))
+    // A conversation is created only when a real message is sent. Opening
+    // chat, tapping "New", or picking a home suggestion must not leave an
+    // empty conversation behind.
+    const existing = conv
+    const activeConv = existing ?? newConversation(mode)
+    addMessage(activeConv.id, userMsg)
+    addMessage(activeConv.id, assistantMsg)
+    if (!existing || existing.messages.length === 0) {
+      rename(activeConv.id, text.slice(0, 40))
     }
 
     // Image commands: /image <prompt>, /edit <prompt> (with a photo attached),
@@ -225,7 +223,7 @@ export function ChatView() {
       const reference = attachments.find(a => a.kind === 'image' && (a.fileId || a.dataUrl))
       if (kind === 'edit' && !reference) {
         setError('Attach a photo first, then use /edit with what you want changed.')
-        updateMessage(conv.id, assistantMsg.id, 'Attach a photo first, then try /edit again.')
+        updateMessage(activeConv.id, assistantMsg.id, 'Attach a photo first, then try /edit again.')
         return
       }
       setStreaming(true)
@@ -237,7 +235,7 @@ export function ChatView() {
             ? { image: { fileId: reference.fileId, dataUrl: reference.dataUrl, mime: reference.mime } }
             : {}),
         })
-        addAttachment(conv.id, assistantMsg.id, {
+        addAttachment(activeConv.id, assistantMsg.id, {
           id: uid(),
           kind: 'image',
           name: result.name,
@@ -247,13 +245,13 @@ export function ChatView() {
           dataUrl: result.dataUrl,
         })
         updateMessage(
-          conv.id,
+          activeConv.id,
           assistantMsg.id,
           kind === 'gif' ? "Here's your animated GIF." : "Here's your image. Want it changed? Type /edit with a photo attached.",
         )
       } catch (e: any) {
         setError(e?.message || 'Could not create that image.')
-        updateMessage(conv.id, assistantMsg.id, `⚠️ ${e?.message || 'Could not create that image.'}`)
+        updateMessage(activeConv.id, assistantMsg.id, `⚠️ ${e?.message || 'Could not create that image.'}`)
       } finally {
         setStreaming(false)
       }
@@ -262,7 +260,7 @@ export function ChatView() {
 
     const config = cfg
     if (!config) {
-      updateMessage(conv.id, assistantMsg.id, 'NEXUS is not configured. Try again in a moment.')
+      updateMessage(activeConv.id, assistantMsg.id, 'NEXUS is not configured. Try again in a moment.')
       return
     }
     const adapter = getAdapter(config.provider)
@@ -277,7 +275,7 @@ export function ChatView() {
     }
     const model = runtimeCfg.model || config.model || adapter.info.defaultModels[0]
 
-    const msgs = [...conv.messages, userMsg].map(m => ({ id: m.id, role: m.role, content: m.content, createdAt: m.createdAt }))
+    const msgs = [...(existing?.messages ?? []), userMsg].map(m => ({ id: m.id, role: m.role, content: m.content, createdAt: m.createdAt }))
     const historyForModel = msgs.filter(m => m.id !== assistantMsg.id)
 
     // Documents are folded into the prompt (bounded so long files can't
@@ -312,7 +310,7 @@ export function ChatView() {
         signal: ac.signal,
         attachments: imageAttachments,
         fast: settings.fastReplies,
-        onChunk: (full) => updateMessage(conv.id, assistantMsg.id, full),
+        onChunk: (full) => updateMessage(activeConv.id, assistantMsg.id, full),
       })
     } catch (e: any) {
       if (e?.name === 'AbortError') {
@@ -322,7 +320,7 @@ export function ChatView() {
         const msg = e?.message || 'Request failed.'
         playError()
         setError(msg)
-        updateMessage(conv.id, assistantMsg.id, `⚠️ ${msg}`)
+        updateMessage(activeConv.id, assistantMsg.id, `⚠️ ${msg}`)
       }
     } finally {
       if (!failed) playReceive()
@@ -377,7 +375,7 @@ export function ChatView() {
             </div>
           )}
         </div>
-        <button className="btn ghost" onClick={() => newConversation(mode)} style={{ padding: '6px 10px' }}>New</button>
+        <button className="btn ghost" onClick={() => { playTap(); select(null) }} style={{ padding: '6px 10px' }}>New</button>
       </div>
 
       {/* messages */}

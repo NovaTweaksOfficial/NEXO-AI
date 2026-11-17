@@ -1,5 +1,4 @@
 import { useUi } from '@/state/ui'
-import { useChat } from '@/state/chat'
 import { useSettings } from '@/state/settings'
 import { RobotMascot } from '@/components/RobotMascot'
 import { playTap } from '@/lib/sounds'
@@ -16,12 +15,10 @@ const SUGGESTED = [
 
 export function HomeView() {
   const { setTab } = useUi()
-  const { newConversation } = useChat()
   const { settings } = useSettings()
 
   const startPrompt = (text: string) => {
     playTap()
-    newConversation('general')
     setTab('chat')
     // store pending prompt
     sessionStorage.setItem('nexus.pendingPrompt', text)

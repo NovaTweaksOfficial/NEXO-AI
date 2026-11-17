@@ -1059,7 +1059,10 @@ export default {
         const user = await getUser(req, env)
         if (!user) return json({ error: 'Not signed in.' }, 401, cors)
         const rows: any = await env.DB.prepare(
-          'SELECT id, updated_at, data FROM conversations WHERE user_id = ? ORDER BY updated_at DESC LIMIT 200',
+          'SELECT id, updated_at, data FROM conversations c ' +
+          'WHERE c.user_id = ? AND NOT EXISTS (SELECT 1 FROM deleted_conversations d ' +
+          'WHERE d.user_id = c.user_id AND d.conversation_id = c.id) ' +
+          'ORDER BY c.updated_at DESC LIMIT 200',
         ).bind(user.id).all()
         const conversations = (rows.results || []).flatMap((r: any) => {
           try { return [JSON.parse(r.data)] } catch { return [] }
@@ -1077,6 +1080,10 @@ export default {
         const serialized = JSON.stringify(data)
         if (serialized.length > 1_500_000) return json({ error: 'Conversation is too large to sync.' }, 413, cors)
         const id = convMatch[1]
+        const deleted = await env.DB.prepare(
+          'SELECT 1 FROM deleted_conversations WHERE user_id = ? AND conversation_id = ?',
+        ).bind(user.id, id).first()
+        if (deleted) return json({ ok: true, ignored: true }, 200, cors)
         await env.DB.prepare(
           'INSERT INTO conversations (id, user_id, updated_at, data) VALUES (?, ?, ?, ?) ' +
           'ON CONFLICT(id, user_id) DO UPDATE SET updated_at = excluded.updated_at, data = excluded.data',
@@ -1087,6 +1094,9 @@ export default {
       if (convMatch && req.method === 'DELETE') {
         const user = await getUser(req, env)
         if (!user) return json({ error: 'Not signed in.' }, 401, cors)
+        await env.DB.prepare(
+          'INSERT OR REPLACE INTO deleted_conversations (user_id, conversation_id, deleted_at) VALUES (?, ?, ?)',
+        ).bind(user.id, convMatch[1], Date.now()).run()
         await env.DB.prepare('DELETE FROM conversations WHERE id = ? AND user_id = ?').bind(convMatch[1], user.id).run()
         return json({ ok: true }, 200, cors)
       }
