@@ -1226,7 +1226,9 @@ function sanitizeProgress(raw: any): any | null {
     return out
   }
   return {
-    xp: num(raw.xp),
+    // Level 999 is the in-app cap and needs 24,974,950 XP, so allow headroom
+    // for the full curve instead of stopping at the old 1,000,000 ceiling.
+    xp: num(raw.xp, 100_000_000),
     streak: num(raw.streak, 3650),
     longestStreak: num(raw.longestStreak, 3650),
     lastDay: text(raw.lastDay, 20) || null,
