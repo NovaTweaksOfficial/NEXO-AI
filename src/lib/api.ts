@@ -75,6 +75,24 @@ export async function createImage(
   })
 }
 
+// ---------------------------------------------------------- moderation
+export interface Restriction {
+  type: 'soft_ban' | 'ban' | 'ip_ban' | 'timeout'
+  status: string
+  reason: string
+  expiresAt: number | null
+  by: string
+  pending: boolean
+  target: string | null
+  message: string
+}
+
+export async function fetchModerationStatus(base: string, token?: string | null) {
+  return apiRequest<{ restriction: Restriction | null }>(base, '/api/moderation/status', {
+    ...(token ? { token } : {}),
+  })
+}
+
 // --------------------------------------------------------------- auth
 export async function register(base: string, email: string, password: string) {
   return apiRequest<{ token: string; user: AuthUser }>(base, '/api/auth/register', {

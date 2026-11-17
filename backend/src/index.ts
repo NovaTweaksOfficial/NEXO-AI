@@ -296,6 +296,7 @@ async function createModeration(env: Env, input: {
   userId?: string | null
   email?: string | null
   ip?: string | null
+  ipHash?: string | null
   type: ModerationType
   reason: string
   by: string
@@ -303,13 +304,13 @@ async function createModeration(env: Env, input: {
   status?: string
 }): Promise<ModerationRow> {
   const id = randomHex(16)
-  const hash = input.ip ? await ipHash(input.ip) : null
+  const hash = input.ipHash || (input.ip ? await ipHash(input.ip) : null)
   const row: ModerationRow = {
     id,
     target_user_id: input.userId || null,
     target_email: input.email || null,
     ip_hash: hash,
-    ip_display: input.ip ? maskIp(input.ip) : null,
+    ip_display: input.ip ? maskIp(input.ip) : input.ipHash ? `IP hash ${input.ipHash.slice(0, 12)}…` : null,
     type: input.type,
     reason: input.reason,
     status: input.status || 'active',
@@ -342,14 +343,14 @@ async function aiSafetyResponse(
   if (user?.email === OWNER_EMAIL) return null
   const flag = safetyFlag(prompt)
   if (!flag) return null
-  if (await pendingSafetyHold(env, user, req)) {
-    return json({ error: 'That request is blocked and is already awaiting the owner’s decision.' }, 403, cors)
+  const held = await pendingSafetyHold(env, user, req)
+  if (held) {
+    const view = restrictionView(held)
+    return json({ error: view.message, moderation: view }, 403, cors)
   }
-  await createSafetyHold(env, req, user, flag, prompt)
-  return json({
-    error: 'That request was blocked and sent to the owner for review. Your access is restricted until they accept or decline.',
-    moderation: { type: 'timeout', reason: `NEXUS Safety: ${flag}`, by: 'NEXUS Safety' },
-  }, 403, cors)
+  const created = await createSafetyHold(env, req, user, flag, prompt)
+  const view = restrictionView(created)
+  return json({ error: view.message, moderation: view }, 403, cors)
 }
 
 // AI safety check. Broad enough to catch the way people actually ask
@@ -395,12 +396,12 @@ async function createSafetyHold(
   user: AuthUser | null,
   flag: string,
   prompt: string,
-): Promise<void> {
+): Promise<ModerationRow> {
   const ip = clientIp(req)
   const moderation = await createModeration(env, {
     userId: user?.id || null,
     email: user?.email || null,
-    ip: user ? null : ip,
+    ip,
     type: 'timeout',
     reason: `NEXUS Safety: ${flag}`,
     by: 'NEXUS Safety',
@@ -414,20 +415,43 @@ async function createSafetyHold(
     `NEXUS blocked a request from ${user?.email || `a guest (${maskIp(ip)})`}. ` +
     `Reason: ${flag}. Prompt: ${prompt.slice(0, 200)}`,
   )
+  return moderation
 }
 
-async function pendingSafetyHold(env: Env, user: AuthUser | null, req: Request): Promise<boolean> {
+function restrictionView(mod: ModerationRow) {
+  const pending = mod.status === 'pending'
+  // This is the only text a restricted user ever sees in the app.
+  const message = pending
+    ? 'Your message has been sent to the owner. Your access stays restricted until they accept or decline.'
+    : mod.type === 'ip_ban'
+      ? 'This device’s IP address is banned from NEXUS. The owner must revoke this restriction.'
+      : mod.type === 'ban'
+        ? 'Your account is banned from NEXUS. The owner must revoke this restriction.'
+        : 'Your account is restricted. The owner must revoke this restriction.'
+  return {
+    type: mod.type,
+    status: mod.status,
+    reason: mod.reason,
+    expiresAt: mod.expires_at,
+    by: mod.created_by,
+    pending,
+    target: mod.target_email || mod.ip_display || null,
+    message,
+  }
+}
+
+async function pendingSafetyHold(env: Env, user: AuthUser | null, req: Request): Promise<ModerationRow | null> {
   const since = Date.now() - 3_600_000
   const row: any = user
     ? await env.DB.prepare(
-      "SELECT id FROM moderation WHERE target_user_id = ? AND created_by = 'NEXUS Safety' " +
+      "SELECT * FROM moderation WHERE target_user_id = ? AND created_by = 'NEXUS Safety' " +
       "AND status = 'pending' AND created_at > ? LIMIT 1",
     ).bind(user.id, since).first()
     : await env.DB.prepare(
-      "SELECT id FROM moderation WHERE ip_hash = ? AND created_by = 'NEXUS Safety' " +
+      "SELECT * FROM moderation WHERE ip_hash = ? AND created_by = 'NEXUS Safety' " +
       "AND status = 'pending' AND created_at > ? LIMIT 1",
     ).bind(await ipHash(clientIp(req)), since).first()
-  return !!row
+  return (row as ModerationRow) || null
 }
 
 // Called after a reply is generated. Catches refusals the keyword pass missed.
@@ -822,35 +846,34 @@ export default {
       }, 200, cors)
     }
 
-    // Resolve moderation once for every API request. Owner routes and auth
-    // stay reachable so the owner can always manage bans and users can leave.
+    // Resolve moderation once for every API request. The owner console, auth
+    // validation, and the restriction-status check stay reachable; everything
+    // else (including sign-out) is locked while a restriction is enforced.
     let currentUser: AuthUser | null = null
     let currentMod: ModerationRow | null = null
-    if (path.startsWith('/api/') && !path.startsWith('/api/auth/') && !path.startsWith('/api/owner/')) {
+    const isAuthRoute = path.startsWith('/api/auth/')
+    const checkModeration =
+      path.startsWith('/api/') &&
+      !path.startsWith('/api/owner/') &&
+      path !== '/api/moderation/status' &&
+      (!isAuthRoute || path === '/api/auth/logout')
+    if (checkModeration) {
       currentUser = await getUser(req, env)
       currentMod = await activeModeration(env, req, currentUser)
-      if (currentMod && currentMod.type !== 'soft_ban') {
-        const label = currentMod.type === 'ip_ban'
-          ? 'This IP address is banned'
-          : currentMod.type === 'ban'
-            ? 'Your account is banned'
-            : 'Your account is temporarily restricted'
-        const until = currentMod.expires_at
-          ? ` until ${new Date(currentMod.expires_at).toISOString()}`
-          : ''
-        return json({
-          error: `${label}${until}. Reason: ${currentMod.reason}`,
-          moderation: {
-            type: currentMod.type,
-            reason: currentMod.reason,
-            expiresAt: currentMod.expires_at,
-            by: currentMod.created_by,
-          },
-        }, 403, cors)
+      if (currentMod) {
+        const view = restrictionView(currentMod)
+        return json({ error: view.message, moderation: view }, 403, cors)
       }
     }
 
     try {
+      // Current restriction for the signed-in account (or this guest's IP).
+      if (path === '/api/moderation/status' && req.method === 'GET') {
+        const user = await getUser(req, env)
+        const mod = await activeModeration(env, req, user)
+        return json({ restriction: mod ? restrictionView(mod) : null }, 200, cors)
+      }
+
       // ------------------------------------------------------------- auth
       if (path === '/api/auth/register' && req.method === 'POST') {
         const body = await parseBody(req)
@@ -1005,10 +1028,6 @@ export default {
 
         const safetyResponse = await aiSafetyResponse(env, req, currentUser, prompt, cors)
         if (safetyResponse) return safetyResponse
-        if (currentMod?.type === 'soft_ban') {
-          return json({ error: 'The image engine is unavailable right now. Please try again later.' }, 503, cors)
-        }
-
         const user = currentUser
         let reference: { data: Uint8Array; mime: string } | undefined
         if (mode === 'edit') {
@@ -1160,7 +1179,9 @@ export default {
         if (!target) return json({ error: 'Enter a user or IP to check.' }, 400, cors)
         const now = Date.now()
         let row: any = null
-        if (target.includes('@')) {
+        if (/^[a-f0-9]{32}$/.test(target)) {
+          row = await env.DB.prepare('SELECT * FROM moderation WHERE id = ?').bind(target).first()
+        } else if (target.includes('@')) {
           row = await env.DB.prepare(
             "SELECT * FROM moderation WHERE type IN ('ban','timeout','soft_ban') " +
             "AND status IN ('active','pending') AND target_email = ? " +
@@ -1171,6 +1192,11 @@ export default {
             "SELECT * FROM moderation WHERE type = 'ip_ban' AND status IN ('active','pending') " +
             'AND ip_hash = ? AND (expires_at IS NULL OR expires_at > ?) ORDER BY created_at DESC LIMIT 1',
           ).bind(await ipHash(target), now).first()
+        } else if (/^[a-f0-9]{8,64}$/.test(target)) {
+          row = await env.DB.prepare(
+            "SELECT * FROM moderation WHERE type = 'ip_ban' AND status IN ('active','pending') " +
+            'AND ip_hash LIKE ? AND (expires_at IS NULL OR expires_at > ?) ORDER BY created_at DESC LIMIT 1',
+          ).bind(`${target}%`, now).first()
         }
         return json({ target, enforced: !!row, moderation: row || null }, 200, cors)
       }
@@ -1191,8 +1217,12 @@ export default {
         let userId: string | null = null
         let email: string | null = null
         let ip: string | null = null
+        let ipHashOverride: string | null = null
         if (type === 'ip_ban') {
-          ip = target
+          // The console shows a hash prefix, not the raw IP. Accept it directly
+          // so an IP can be banned without ever exposing the address.
+          if (/^[a-f0-9]{8,64}$/.test(target)) ipHashOverride = target
+          else ip = target
         } else {
           const found: any = target.includes('@')
             ? await env.DB.prepare('SELECT id, email FROM users WHERE email = ?').bind(target.toLowerCase()).first()
@@ -1204,7 +1234,7 @@ export default {
         const hours = Math.max(1, Math.min(720, Math.floor(Number(body?.hours) || 24)))
         const expiresAt = type === 'timeout' ? Date.now() + hours * 3_600_000 : null
         const moderation = await createModeration(env, {
-          userId, email, ip, type, reason, by: owner.email, expiresAt,
+          userId, email, ip, ipHash: ipHashOverride, type, reason, by: owner.email, expiresAt,
         })
         // Read back from D1 so the console can prove the restriction is live.
         const live: any = email
@@ -1249,6 +1279,43 @@ export default {
         await env.DB.prepare("UPDATE owner_alerts SET status = 'declined' WHERE moderation_id = ? AND status = 'pending'")
           .bind(revokeMatch[1]).run()
         return json({ ok: true }, 200, cors)
+      }
+
+      // Change an existing hold/restriction (accept + convert in one step).
+      const updateMatch = path.match(/^\/api\/owner\/moderate\/([a-f0-9]+)\/update$/)
+      if (updateMatch && req.method === 'POST') {
+        const owner = await requireOwner(req, env)
+        if (!owner) return json({ error: 'Owner access required.' }, 403, cors)
+        const body = await parseBody(req)
+        const type = body?.type
+        const reason = typeof body?.reason === 'string' ? body.reason.trim() : ''
+        if (!['soft_ban', 'ban', 'ip_ban', 'timeout'].includes(type)) {
+          return json({ error: 'Choose a valid moderation type.' }, 400, cors)
+        }
+        if (reason.length < 5) return json({ error: 'A reason is required (at least 5 characters).' }, 400, cors)
+        const row: any = await env.DB.prepare('SELECT * FROM moderation WHERE id = ?').bind(updateMatch[1]).first()
+        if (!row) return json({ error: 'Restriction not found.' }, 404, cors)
+        if (type === 'ip_ban' && !row.ip_hash) {
+          return json({ error: 'That action has no IP attached. Ban the IP from the original AI alert instead.' }, 400, cors)
+        }
+        if (type !== 'ip_ban' && !row.target_user_id) {
+          return json({ error: 'That target has no account. Use IP ban for guests.' }, 400, cors)
+        }
+        const hours = Math.max(1, Math.min(720, Math.floor(Number(body?.hours) || 24)))
+        const expiresAt = type === 'timeout' ? Date.now() + hours * 3_600_000 : null
+        const now = Date.now()
+        await env.DB.prepare(
+          'UPDATE moderation SET type = ?, reason = ?, status = ?, expires_at = ?, created_by = ?, created_at = ? WHERE id = ?',
+        ).bind(type, reason, 'active', expiresAt, owner.email, now, row.id).run()
+        await env.DB.prepare("UPDATE owner_alerts SET status = 'accepted' WHERE moderation_id = ? AND status = 'pending'")
+          .bind(row.id).run()
+        return json({
+          moderation: {
+            ...row, type, reason, status: 'active', expires_at: expiresAt,
+            created_by: owner.email, created_at: now,
+          },
+          enforced: true,
+        }, 200, cors)
       }
 
       // -------------------------------------------------------------- chat
@@ -1345,21 +1412,6 @@ export default {
         }
 
         const stream = settings.stream !== false && body.stream !== false
-
-        // Soft ban: answer normally-looking but never call the AI engine.
-        if (currentMod?.type === 'soft_ban') {
-          const gentle = "I'm having trouble connecting right now. Please try again later."
-          if (!stream) return json({ text: gentle }, 200, cors)
-          const enc = new TextEncoder()
-          const { readable, writable } = new TransformStream()
-          const writer = writable.getWriter()
-          void (async () => {
-            await writer.write(enc.encode(`data: ${JSON.stringify({ delta: gentle })}\n\n`))
-            await writer.write(enc.encode('data: [DONE]\n\n'))
-            await writer.close()
-          })()
-          return new Response(readable, { status: 200, headers: sseHeaders(cors) })
-        }
 
         const oaiBody: any = {
           model: upstreamModel,

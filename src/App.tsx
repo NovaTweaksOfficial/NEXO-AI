@@ -4,6 +4,8 @@ import { useUi } from './state/ui'
 import { useSettings } from './state/settings'
 import { useAuth } from './state/auth'
 import { useChat } from './state/chat'
+import { useModeration } from './state/moderation'
+import { RestrictionLock } from './components/RestrictionLock'
 import { RobotMascot, RobotIcon } from './components/RobotMascot'
 import { playNavigate } from './lib/sounds'
 import { HomeView } from './views/HomeView'
@@ -48,6 +50,7 @@ export default function App() {
   const { tab, setTab } = useUi()
   const { settings } = useSettings()
   const { status } = useAuth()
+  const { restriction, checking } = useModeration()
   const { syncNow } = useChat()
 
   useEffect(() => {
@@ -68,7 +71,8 @@ export default function App() {
     }
   }, [syncNow])
 
-  if (status === 'loading') return <Splash />
+  if (restriction) return <RestrictionLock message={restriction.message} />
+  if (checking || status === 'loading') return <Splash />
   if (status === 'signedOut') return <AuthView />
 
   const views: Record<string, ReactNode> = {

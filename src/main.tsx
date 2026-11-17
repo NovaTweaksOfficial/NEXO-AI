@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { SettingsProvider } from './state/settings'
 import { AuthProvider } from './state/auth'
+import { ModerationProvider } from './state/moderation'
 import { ChatProvider } from './state/chat'
 import { UiProvider } from './state/ui'
 import App from './App'
@@ -20,11 +21,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <SettingsProvider>
       <AuthProvider>
-        <ChatProvider>
-          <UiProvider>
-            <App />
-          </UiProvider>
-        </ChatProvider>
+        <ModerationProvider>
+          <ChatProvider>
+            <UiProvider>
+              <App />
+            </UiProvider>
+          </ChatProvider>
+        </ModerationProvider>
       </AuthProvider>
     </SettingsProvider>
   </React.StrictMode>
