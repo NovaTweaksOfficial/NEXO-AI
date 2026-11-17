@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useSettings } from '@/state/settings'
+import { useAuth } from '@/state/auth'
+import { useModeration } from '@/state/moderation'
 import { getAdapter } from '@/lib/providers'
 import { NEXUS_IDENTITY } from '@/lib/identity'
 import { uid } from '@/lib/storage'
@@ -45,6 +47,8 @@ export function ToolboxView() {
 
 function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
   const { settings, selectedConfig: cfg } = useSettings()
+  const { token } = useAuth()
+  const { refresh: refreshModeration } = useModeration()
   const [input, setInput] = useState('')
   const [output, setOutput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -64,6 +68,7 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
       model: settings.selectedModel || cfg.model || '',
       mode: cfg.mode,
       backendUrl: settings.backendUrl,
+      token,
     }
     try {
       const text = await adapter.chat(runtimeCfg, {
@@ -75,6 +80,7 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
       })
       if (!output) setOutput(text)
     } catch (e: any) {
+      if (e?.status === 403) { void refreshModeration(); return }
       playError()
       setError(e?.message || 'Failed.')
     } finally {

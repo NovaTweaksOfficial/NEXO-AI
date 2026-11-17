@@ -3,6 +3,7 @@ import { useUi } from '@/state/ui'
 import { useChat } from '@/state/chat'
 import { useSettings } from '@/state/settings'
 import { useAuth } from '@/state/auth'
+import { useModeration } from '@/state/moderation'
 import { getAdapter } from '@/lib/providers'
 import { NEXUS_IDENTITY } from '@/lib/identity'
 import { uid } from '@/lib/storage'
@@ -90,6 +91,7 @@ export function ChatView() {
   const { current, newConversation, select, addMessage, addAttachment, updateMessage, removeMessage, rename } = useChat()
   const { settings, selectedConfig: cfg } = useSettings()
   const { token } = useAuth()
+  const { refresh: refreshModeration } = useModeration()
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -174,6 +176,7 @@ export function ChatView() {
       }
       setPending(prev => [...prev, ...added].slice(0, MAX_ATTACHMENTS))
     } catch (e: any) {
+      if (e?.status === 403) { void refreshModeration(); return }
       setError(e?.message || 'Could not add that file.')
     } finally {
       setPreparing(false)
@@ -250,6 +253,7 @@ export function ChatView() {
           kind === 'gif' ? "Here's your animated GIF." : "Here's your image. Want it changed? Type /edit with a photo attached.",
         )
       } catch (e: any) {
+        if (e?.status === 403) { void refreshModeration(); return }
         setError(e?.message || 'Could not create that image.')
         updateMessage(activeConv.id, assistantMsg.id, `⚠️ ${e?.message || 'Could not create that image.'}`)
       } finally {
@@ -313,7 +317,12 @@ export function ChatView() {
         onChunk: (full) => updateMessage(activeConv.id, assistantMsg.id, full),
       })
     } catch (e: any) {
-      if (e?.name === 'AbortError') {
+      if (e?.status === 403) {
+        failed = true
+        // The safety lock is now authoritative; pull it in immediately instead
+        // of waiting for the next moderation poll.
+        void refreshModeration()
+      } else if (e?.name === 'AbortError') {
         // keep partial
       } else {
         failed = true

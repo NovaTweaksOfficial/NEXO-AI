@@ -10,22 +10,25 @@ export function apiUrl(base: string, path: string): string {
   return `${normalizeBase(base)}${path}`
 }
 
-async function readError(res: Response): Promise<string> {
-  try {
-    const data = await res.json()
-    return data?.error || data?.message || `Request failed (${res.status})`
-  } catch {
-    return `Request failed (${res.status})`
-  }
-}
-
 export class ApiError extends Error {
   status: number
-  constructor(message: string, status: number) {
+  moderation?: unknown
+  constructor(message: string, status: number, moderation?: unknown) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.moderation = moderation
   }
+}
+
+export async function throwApiError(res: Response): Promise<never> {
+  let data: any = null
+  try { data = await res.json() } catch { /* non-JSON error */ }
+  throw new ApiError(
+    data?.error || data?.message || `Request failed (${res.status})`,
+    res.status,
+    data?.moderation,
+  )
 }
 
 export async function apiRequest<T = any>(
@@ -41,7 +44,7 @@ export async function apiRequest<T = any>(
     },
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   })
-  if (!res.ok) throw new ApiError(await readError(res), res.status)
+  if (!res.ok) return throwApiError(res)
   return res.json()
 }
 
@@ -143,7 +146,7 @@ export async function uploadFile(
     headers: { Authorization: `Bearer ${token}` },
     body: form,
   })
-  if (!res.ok) throw new Error(await readError(res))
+  if (!res.ok) return throwApiError(res)
   const data = await res.json()
   const mime = data.mime || blob.type || 'application/octet-stream'
   return {

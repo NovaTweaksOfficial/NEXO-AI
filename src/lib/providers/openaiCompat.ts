@@ -2,6 +2,7 @@ import type { ProviderAdapter, ChatOptions, RuntimeConfig } from './types'
 import type { ProviderId } from '@/types'
 import { providerInfo as infoOf } from './registry'
 import type { ProviderInfo } from './types'
+import { throwApiError } from '@/lib/api'
 
 function baseUrl(cfg: RuntimeConfig, info: ProviderInfo): string {
   return (cfg.baseUrl || info.defaultBaseUrl).replace(/\/$/, '')
@@ -136,14 +137,14 @@ async function chatViaBackend(cfg: RuntimeConfig, opts: ChatOptions): Promise<st
   if (cfg.token) headers.Authorization = `Bearer ${cfg.token}`
   if (!opts.settings.stream) {
     const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: opts.signal })
-    if (!res.ok) throw new Error(await res.text())
+    if (!res.ok) return throwApiError(res)
     const data = await res.json()
     const text = data?.text ?? ''
     opts.onChunk?.(text)
     return text
   }
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: opts.signal })
-  if (!res.ok) throw new Error(await res.text())
+  if (!res.ok) return throwApiError(res)
   const reader = res.body!.getReader()
   const decoder = new TextDecoder()
   let full = ''

@@ -353,11 +353,17 @@ async function aiSafetyResponse(
   return json({ error: view.message, moderation: view }, 403, cors)
 }
 
-// AI safety check. Broad enough to catch the way people actually ask
-// ("adult images", "inappropriate pics", "make her naked") instead of only
-// literal keywords. Anything flagged creates a hold plus an owner alert.
+function normalizeSafetyText(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9+'\-\s]/gi, ' ').replace(/\s+/g, ' ').trim()
+}
+
+// One pre-flight check shared by chat, images, edits, GIFs, and file content.
+// It deliberately matches intent ("hide the body", "get away with it"), not
+// just single words, so a flagged request is locked before any model is called.
 function safetyFlag(prompt: string): string | null {
-  const text = prompt.toLowerCase().replace(/[_*~`.,!?]+/g, ' ')
+  const text = normalizeSafetyText(prompt)
+  if (!text) return null
+
   const adultWord =
     /\b(18\+|nsfw|porn\w*|xxx|hentai|erotic\w*|sex\w*|explicit|smut|lewd|horny|fetish\w*|orgasm\w*|orgy|nude|naked|topless|undress\w*|lingerie|seductive|suggestive|provocative|naughty|sexy|boobs|tits|genital\w*|masturbat\w*)\b/
   const adultNearMedia =
@@ -365,26 +371,69 @@ function safetyFlag(prompt: string): string | null {
   if (adultWord.test(text) || adultNearMedia.test(text)) {
     return 'Explicit or adult content requested'
   }
-  if (/\b(kill|hurt|attack|dox|harm|assault|poison|kidnap|abuse|threaten|stalk)\b.{0,60}\b(him|her|them|someone|somebody|person|people|user|guy|girl|woman|man|kid|child)\b/.test(text)) {
+
+  const concealVerbs =
+    'hide|hidden|hiding|dispose|disposal|disappear|remove|destroy|burn|burning|bury|buried|burial|cremate|cremation|dump|conceal|cover[ -]?up|clean[ -]?up|get rid of|erase|wipe'
+  const concealTargets = 'body|bodies|corpse|corpses|remains|blood|evidence|crime scene|fingerprints|dna'
+  const concealment = new RegExp(
+    `\\b(${concealVerbs})\\b.{0,100}\\b(${concealTargets})\\b|\\b(${concealTargets})\\b.{0,100}\\b(${concealVerbs})\\b`,
+  )
+  if (concealment.test(text)) return 'Violent crime or evidence concealment requested'
+
+  const person = 'him|her|them|someone|somebody|person|people|user|guy|girl|woman|man|kid|child|children|family|wife|husband|ex|teacher|boss'
+  if (new RegExp(`\\b(kill|hurt|attack|dox|harm|assault|poison|kidnap|abuse|threaten|stalk|murder|assassinate|eliminate)\\b.{0,80}\\b(${person})\\b`).test(text)) {
     return 'Targeted harm or harassment requested'
   }
-  if (/\b(bomb|explosive|weapon|malware|ransomware|poison)\b.{0,50}\b(make|build|create|how to|recipe)\b|\b(how to|recipe for)\b.{0,40}\b(bomb|explosive|weapon|poison)\b/.test(text)) {
+
+  if (/\b(how to|recipe for|instructions for|steps to)\b.{0,60}\b(bomb|explosive|weapon|poison|nerve agent|chemical weapon|firearm|gun|molotov)\b|\b(bomb|explosive|weapon|malware|ransomware|poison|nerve agent|chemical weapon|firearm|gun|molotov)\b.{0,60}\b(make|build|create|how to|recipe|synthesize|manufacture|assemble)\b/.test(text)) {
     return 'Dangerous instructions requested'
+  }
+
+  const crimeWords = 'murder|kill|crime|police|body|evidence|fbi|investigation|theft|robbery'
+  if (new RegExp(`\\b(get away with|avoid getting caught|evade the police|escape the police|leave no trace|cover my tracks|not get caught|destroy evidence|plant evidence|frame someone)\\b.{0,100}\\b(${crimeWords})\\b|\\b(${crimeWords})\\b.{0,100}\\b(get away with|avoid getting caught|leave no trace|cover my tracks|destroy evidence|frame someone)\\b`).test(text)) {
+    return 'Crime concealment or evasion requested'
+  }
+
+  if (/\b(suicide|kill myself|end my life|self harm|overdose|cut myself|hang myself|starve myself)\b/.test(text)) {
+    return 'Self-harm instructions requested'
+  }
+
+  const accessTargets = 'account|password|computer|network|wifi|system|website|bank|card|credit|crypto|wallet|someone|server|database|security'
+  if (new RegExp(`\\b(hack|hacking|breach|break into|bypass|crack|steal|phish|phishing|ddos|malware|ransomware|keylogger|carding|sim swap)\\b.{0,80}\\b(${accessTargets})\\b|\\b(how to|help me)\\b.{0,40}\\b(hack|steal|breach|bypass|phish)\\b`).test(text)) {
+    return 'Unauthorized access or theft requested'
+  }
+
+  if (/\b(meth|methamphetamine|fentanyl|heroin|cocaine|mdma|ecstasy|lsd)\b.{0,60}\b(make|buy|sell|cook|synthesize|manufacture|how to|recipe|deal)\b|\b(how to|recipe for)\b.{0,40}\b(meth|fentanyl|heroin|cocaine)\b/.test(text)) {
+    return 'Illegal drug instructions requested'
+  }
+
+  const minor = 'child|children|underage|minor|teen|kid|girl|boy'
+  const sexual = 'sex|sexual|nude|naked|porn|erotic|fetish|explicit|seduce'
+  if (new RegExp(`\\b(${minor})\\b.{0,60}\\b(${sexual})\\b|\\b(${sexual})\\b.{0,60}\\b(${minor})\\b`).test(text)) {
+    return 'Sexual content involving a minor requested'
+  }
+
+  if (/\b(jailbreak|developer mode|dan mode|ignore (all )?(the )?(rules|guidelines|instructions|safety)|bypass (the )?(safety|filters?|restrictions?|guidelines)|pretend you have no rules|act as if you have no restrictions|no content policy)\b/.test(text)) {
+    return 'Attempt to bypass safety rules'
+  }
+
+  if (/\b(illegal|against the law|crime)\b.{0,80}\b(how to|help me|instructions|steps|ways)\b|\b(how to|help me)\b.{0,40}\b(commit a crime|break the law|do something illegal)\b/.test(text)) {
+    return 'Illegal activity requested'
   }
   return null
 }
 
-// Safety net: when NEXUS itself refuses a request, the owner still gets an
-// alert even if the wording didn't match a keyword pattern.
+// Safety net for wording the keyword pass cannot predict. Any clear refusal
+// becomes a reportable, enforced hold instead of a visible "sorry" answer.
 function refusalFlag(reply: string): string | null {
-  const t = reply.toLowerCase()
-  // NEXUS usually refuses in plain language ("I can't assist with that")
-  // without repeating the banned topic, so treat any clear refusal as a
-  // reportable event rather than requiring a keyword in the reply.
-  if (/\b(can't|cannot|won't|unable to|not able to)\b.{0,80}\b(help|assist|do that|create|make|generate|provide|write|support)\b/.test(t)) {
+  const t = normalizeSafetyText(reply)
+  if (/\b(i'?m sorry|sorry|i apologize|apologize)\b.{0,180}\b(can'?t|cannot|can not|won'?t|unable|not able|refuse|not comfortable|not appropriate)\b/.test(t)) {
     return 'NEXUS refused a disallowed request'
   }
-  if (/\b(refuse|refused|refusing|not going to help|can't help with that|won't help with that)\b/.test(t)) {
+  if (/\b(can'?t|cannot|can not|won'?t|unable to|not able to|refuse|refused|refusing|not going to help|not comfortable|not appropriate|against (my|the) (guidelines|rules|policy)|violates (my|the) (policy|guidelines))\b.{0,160}\b(help|assist|do that|create|make|generate|provide|write|support|fulfill|comply|answer|instructions?|request|content)\b/.test(t)) {
+    return 'NEXUS refused a disallowed request'
+  }
+  if (/\b(as an ai|my guidelines|my safety|i'?m programmed|i am programmed)\b.{0,160}\b(can'?t|cannot|won'?t|unable|not|refuse)\b/.test(t)) {
     return 'NEXUS refused a disallowed request'
   }
   return null
@@ -396,6 +445,7 @@ async function createSafetyHold(
   user: AuthUser | null,
   flag: string,
   prompt: string,
+  reply?: string,
 ): Promise<ModerationRow> {
   const ip = clientIp(req)
   const moderation = await createModeration(env, {
@@ -413,9 +463,29 @@ async function createSafetyHold(
     moderation,
     'AI safety hold — needs your decision',
     `NEXUS blocked a request from ${user?.email || `a guest (${maskIp(ip)})`}. ` +
-    `Reason: ${flag}. Prompt: ${prompt.slice(0, 200)}`,
+    `Reason: ${flag}. Prompt: ${prompt.slice(0, 200)}` +
+    (reply ? ` NEXUS reply: ${reply.slice(0, 160)}` : ''),
   )
   return moderation
+}
+
+// A refusal is not an answer the user gets to see. It becomes the same
+// owner-reviewed lock as a pre-flight flag, with an alert in the console.
+async function safetyResponseFromReply(
+  env: Env,
+  req: Request,
+  user: AuthUser | null,
+  prompt: string,
+  reply: string,
+  cors: Record<string, string>,
+): Promise<Response | null> {
+  if (user?.email === OWNER_EMAIL) return null
+  const flag = refusalFlag(reply)
+  if (!flag) return null
+  const held = await pendingSafetyHold(env, user, req)
+  const created = held || await createSafetyHold(env, req, user, flag, prompt, reply)
+  const view = restrictionView(created)
+  return json({ error: view.message, moderation: view }, 403, cors)
 }
 
 function restrictionView(mod: ModerationRow) {
@@ -452,20 +522,6 @@ async function pendingSafetyHold(env: Env, user: AuthUser | null, req: Request):
       "AND status = 'pending' AND created_at > ? LIMIT 1",
     ).bind(await ipHash(clientIp(req)), since).first()
   return (row as ModerationRow) || null
-}
-
-// Called after a reply is generated. Catches refusals the keyword pass missed.
-async function alertOnRefusal(
-  env: Env,
-  req: Request,
-  user: AuthUser | null,
-  prompt: string,
-  reply: string,
-): Promise<void> {
-  if (user?.email === OWNER_EMAIL) return
-  const flag = refusalFlag(reply)
-  if (!flag || await pendingSafetyHold(env, user, req)) return
-  await createSafetyHold(env, req, user, flag, prompt)
 }
 
 // -------------------------------------------------------------------- vision
@@ -791,6 +847,26 @@ function relayWorkersAI(
   return new Response(readable, { status: 200, headers: sseHeaders(cors) })
 }
 
+// Streams the already-safety-checked reply in small chunks. This preserves the
+// typewriter effect while keeping the full text available for refusal checks.
+function streamText(text: string, cors: Record<string, string>): Response {
+  const { readable, writable } = new TransformStream()
+  const writer = writable.getWriter()
+  const enc = new TextEncoder()
+  const chunks = text.match(/[\s\S]{1,32}/g) || []
+  void (async () => {
+    try {
+      for (const chunk of chunks) {
+        await writer.write(enc.encode(`data: ${JSON.stringify({ delta: chunk })}\n\n`))
+      }
+      await writer.write(enc.encode('data: [DONE]\n\n'))
+    } finally {
+      await writer.close()
+    }
+  })()
+  return new Response(readable, { status: 200, headers: sseHeaders(cors) })
+}
+
 // ------------------------------------------------------------------- worker
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
@@ -985,6 +1061,9 @@ export default {
         const name = String(file.name || 'file').slice(0, 200)
         const mime = String(file.type || 'application/octet-stream')
         const text = await extractDocumentText(new Uint8Array(bytes), name, mime)
+        // File text is folded into chat prompts, so check it at upload time too.
+        const safetyResponse = await aiSafetyResponse(env, req, user, `${name}\n${text || ''}`, cors)
+        if (safetyResponse) return safetyResponse
         const id = randomHex(16)
         await env.DB.prepare(
           'INSERT INTO files (id, user_id, name, mime, size, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -1354,12 +1433,18 @@ export default {
 
         const messages: ChatMessage[] = body.messages
         const lastUserText = [...messages].reverse().find(m => m.role === 'user')?.content || ''
-        const safetyResponse = await aiSafetyResponse(env, req, currentUser, lastUserText, cors)
-        if (safetyResponse) return safetyResponse
-
         const clientSystemPrompt: string | undefined = typeof body.systemPrompt === 'string'
           ? body.systemPrompt.split(OWNER_MARKER).join('[removed]').slice(0, 4000)
           : undefined
+        // Check the whole recent conversation, not just the final line, so
+        // harmful instructions cannot hide in an earlier message or system note.
+        const safetyTexts = [
+          ...messages.filter(m => m.role === 'user').slice(-10).map(m => String(m.content).slice(0, 4000)),
+          clientSystemPrompt || '',
+        ].join('\n').slice(0, 20_000)
+        const safetyResponse = await aiSafetyResponse(env, req, currentUser, safetyTexts, cors)
+        if (safetyResponse) return safetyResponse
+
         const chatUser = currentUser
         const ownerNote = chatUser?.email === OWNER_EMAIL ? OWNER_PROMPT : ''
         const systemPrompt =
@@ -1411,98 +1496,59 @@ export default {
           }
         }
 
-        const stream = settings.stream !== false && body.stream !== false
-
+        const streamToClient = settings.stream !== false && body.stream !== false
         const oaiBody: any = {
           model: upstreamModel,
           messages: chatMessages,
           temperature: settings.temperature,
           max_tokens: settings.maxTokens,
           top_p: settings.topP,
-          stream,
+          // Ask for one complete reply so it can be screened before the user
+          // sees any of it. streamText() still gives the client a typewriter.
+          stream: false,
         }
 
         // Try the configured upstream first; free tiers can be busy or rate
         // limited, so fall back to Cloudflare Workers AI instead of failing.
-        let res: Response | null = null
+        let replyText = ''
+        let usedWorkersAi = false
         if (p !== 'workersai' && !skipUpstream) {
           try {
-            res = await fetch(`${base}/chat/completions`, {
+            const res = await fetch(`${base}/chat/completions`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: `Bearer ${key}` } : {}) },
               body: JSON.stringify(oaiBody),
               signal: AbortSignal.timeout(25_000),
             })
-            if (!res.ok) res = null
-          } catch {
-            res = null
-          }
+            if (res.ok) {
+              const data: any = await res.json()
+              replyText = String(data?.choices?.[0]?.message?.content ?? '')
+            }
+          } catch { /* fall back to Workers AI */ }
         }
 
-        if (!res) {
+        if (!replyText) {
           try {
-            const outcome = await runWorkersAI(env, chatMessages, settings, stream)
-            if (stream && outcome.stream) {
-              return relayWorkersAI(outcome.stream, cors, async full => {
-                await recordUsage(env, 1, 0, textReplyNeurons(chatMessages, full))
-                await alertOnRefusal(env, req, currentUser, lastUserText, full)
-              })
+            const outcome = await runWorkersAI(env, chatMessages, settings, false)
+            if (outcome.text) {
+              replyText = outcome.text
+              usedWorkersAi = true
             }
-            const text = outcome.text || ''
-            await recordUsage(env, 1, 0, textReplyNeurons(chatMessages, text))
-            await alertOnRefusal(env, req, currentUser, lastUserText, text)
-            return json({ text }, 200, cors)
           } catch {
             return json({ error: 'NEXUS is temporarily unavailable. Please try again in a moment.' }, 503, cors)
           }
         }
-
-        if (!stream) {
-          const data: any = await res.json()
-          const text = data?.choices?.[0]?.message?.content ?? ''
-          await alertOnRefusal(env, req, currentUser, lastUserText, text)
-          return json({ text }, 200, cors)
+        if (!replyText) {
+          return json({ error: 'NEXUS is temporarily unavailable. Please try again in a moment.' }, 503, cors)
         }
 
-        const { readable, writable } = new TransformStream()
-        const writer = writable.getWriter()
-        const enc = new TextEncoder()
-        ;(async () => {
-          const reader = res.body!.getReader()
-          const dec = new TextDecoder()
-          let buf = ''
-          let full = ''
-          try {
-            while (true) {
-              const { done, value } = await reader.read()
-              if (done) break
-              buf += dec.decode(value, { stream: true })
-              const lines = buf.split('\n')
-              buf = lines.pop() || ''
-              for (const line of lines) {
-                const t = line.trim()
-                if (!t || !t.startsWith('data:')) continue
-                const data = t.slice(5).trim()
-                if (data === '[DONE]') continue
-                try {
-                  const j = JSON.parse(data)
-                  const delta = j?.choices?.[0]?.delta?.content
-                  if (delta) {
-                    full += delta
-                    await writer.write(enc.encode(`data: ${JSON.stringify({ delta })}\n\n`))
-                  }
-                } catch { /* ignore */ }
-              }
-            }
-            await writer.write(enc.encode('data: [DONE]\n\n'))
-          } catch (e: any) {
-            await writer.write(enc.encode(`data: ${JSON.stringify({ error: e?.message || 'stream error' })}\n\n`))
-          } finally {
-            try { await alertOnRefusal(env, req, currentUser, lastUserText, full) } catch { /* ignore */ }
-            await writer.close()
-          }
-        })()
-        return new Response(readable, { status: 200, headers: sseHeaders(cors) })
+        await recordUsage(env, usedWorkersAi ? 1 : 0, 0, textReplyNeurons(chatMessages, replyText))
+        // A refusal never reaches the chat: it becomes an enforced hold and an
+        // owner alert, with the same lock screen as a pre-flight safety flag.
+        const refusal = await safetyResponseFromReply(env, req, currentUser, lastUserText, replyText, cors)
+        if (refusal) return refusal
+        if (!streamToClient) return json({ text: replyText }, 200, cors)
+        return streamText(replyText, cors)
       }
 
       return json({ error: 'Not found' }, 404, cors)

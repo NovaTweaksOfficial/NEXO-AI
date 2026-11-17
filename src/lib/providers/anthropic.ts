@@ -1,5 +1,6 @@
 import type { ProviderAdapter, ChatOptions, RuntimeConfig } from './types'
 import { providerInfo as infoOf } from './registry'
+import { throwApiError } from '@/lib/api'
 
 // Anthropic uses its own API; implement native adapter.
 const info = infoOf('anthropic')
@@ -105,16 +106,18 @@ async function callAnthropicBackend(cfg: RuntimeConfig, opts: ChatOptions): Prom
     systemPrompt: opts.systemPrompt,
     stream: opts.settings.stream,
   }
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (cfg.token) headers.Authorization = `Bearer ${cfg.token}`
   if (!opts.settings.stream) {
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: opts.signal })
-    if (!res.ok) throw new Error(await res.text())
+    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: opts.signal })
+    if (!res.ok) return throwApiError(res)
     const data = await res.json()
     const text = data?.text ?? ''
     opts.onChunk?.(text)
     return text
   }
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: opts.signal })
-  if (!res.ok) throw new Error(await res.text())
+  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: opts.signal })
+  if (!res.ok) return throwApiError(res)
   const reader = res.body!.getReader()
   const decoder = new TextDecoder()
   let full = ''
