@@ -16,16 +16,15 @@ const TOOLS: ToolDef[] = [
     description: 'Build BepInEx / IL2CPP mods for Gorilla Tag with C# and Unity.',
     icon: '🐒',
     systemPrompt:
-      'You are a Gorilla Tag modding mentor. Help the user make real, working mods step by step. ' +
+      'You are a Gorilla Tag mod builder. Produce the finished mod itself, not a tutorial. ' +
       'Assume BepInEx 5.x with Il2CppInterop for an IL2CPP Unity build, C# plugins, HarmonyLib patches, and Unity 2021 LTS conventions. ' +
-      'Give a short plan first, then concrete files: plugin class with [BepInPlugin], patch classes, folder layout (BepInEx/plugins, BepInEx/patchers), and a build/test checklist. ' +
-      'When a step needs commands, show real shell commands (for example dotnet build) in a bash code block, and show real grep commands for searching game logs (for example grep -i "error" BepInEx/LogOutput.log). ' +
-      'Recommend testing offline or in a private lobby, keeping backups of game files, and checking the game’s current rules before using any mod online. ' +
-      'Offline and private-lobby mod menus are allowed: give safe C# examples. Do not help with malware, account compromise, payment abuse, network abuse, or mods designed to harm or harass other players. ' +
-      'Use markdown code blocks with language tags and explain each patch in plain language.',
-    inputLabel: 'What mod are you making?',
-    inputPlaceholder: 'e.g. a plugin that changes my player color, or a patch that logs room joins…',
-    outputLabel: 'Mod plan & code',
+      'Output every file with a filename header like `=== Plugin.cs ===` followed by complete code: plugin class with [BepInPlugin], patch classes, the .csproj, and the BepInEx/plugins folder layout. ' +
+      'If the user asks for a mod menu, write the working menu code now. No preamble, no "here is how", no step-by-step teaching, no placeholders, no "add your code here". ' +
+      'Include real commands only where needed: a bash block for `dotnet build` and a grep line for checking BepInEx/LogOutput.log. Keep prose to one short offline-testing note at the end. ' +
+      'Offline and private-lobby mods are allowed. Do not help with malware, account compromise, payment abuse, network abuse, or mods designed to harm or harass other players.',
+    inputLabel: 'What mod should I build for you?',
+    inputPlaceholder: 'e.g. build a BepInEx mod menu with a color toggle and a noclip toggle for private lobbies…',
+    outputLabel: 'Complete mod files',
   },
   {
     id: 'mods-general',
@@ -33,16 +32,14 @@ const TOOLS: ToolDef[] = [
     description: 'Game and app modding help: Unity, C#, BepInEx, reverse engineering.',
     icon: '🛠️',
     systemPrompt:
-      'You are a general modding mentor. Help users make mods for games and apps: locating the right framework (BepInEx, MelonLoader, Fabric/Forge, x64dbg-style analysis), ' +
-      'setting up a decompiler, reading managed or IL2CPP code, writing C#/C++ patches, hooking functions safely, and packaging a clean release. ' +
-      'Start with a short plan, then give exact files, folder layout, and a build-and-test checklist. Include real shell commands in bash code blocks when a build or install step is needed, ' +
-      'and real grep commands when searching logs or decompiled output. ' +
-      'Stress backups, running modified builds offline first, version matching between mod and game, and respecting the software’s license and online rules. ' +
-      'Offline and private-server mods are allowed: give safe examples. Do not help with malware, account compromise, payment abuse, mods that target other players, or network abuse. ' +
-      'Use markdown code blocks with language tags.',
-    inputLabel: 'What are you modding?',
-    inputPlaceholder: 'Game/app name, version, engine, and what you want to change…',
-    outputLabel: 'Mod plan & code',
+      'You are a general mod builder. Produce the finished mod or patch, not a lesson. ' +
+      'Pick the right framework (BepInEx, MelonLoader, Fabric/Forge, etc.), then output every file with a filename header like `=== Patch.cs ===` and complete C#/C++ code, plus the folder layout and project file. ' +
+      'No preamble, no "here is how", no step-by-step teaching, no placeholders. If the user names a feature, implement it in code now. ' +
+      'Include real bash commands only when a build step is needed and a grep line when checking logs. Keep prose to one short offline-testing note at the end. ' +
+      'Offline and private-server mods are allowed. Do not help with malware, account compromise, payment abuse, mods that target other players, or network abuse.',
+    inputLabel: 'What should I build for you?',
+    inputPlaceholder: 'Game/app, version, engine, and the feature you want implemented…',
+    outputLabel: 'Complete mod files',
   },
   { id: 'writer', name: 'AI Writing Assistant', description: 'Draft essays, articles, and content.', icon: '✍️', systemPrompt: 'You are a skilled writing assistant. Produce polished, well-structured writing based on the user request.', inputLabel: 'What should I write?', inputPlaceholder: 'Describe what you want written…', outputLabel: 'Result' },
   { id: 'summarizer', name: 'Text Summarizer', description: 'Summarize long text into key points.', icon: '📄', systemPrompt: 'Summarize the provided text concisely with key bullet points.', inputLabel: 'Text to summarize', inputPlaceholder: 'Paste text here…', outputLabel: 'Summary' },
@@ -116,7 +113,9 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
       const text = await adapter.chat(runtimeCfg, {
         messages: [{ id: uid(), role: 'user', content: input, createdAt: Date.now() }],
         model: runtimeCfg.model,
-        settings: settings.generation,
+        settings: tool.id === 'gorilla-tag-mods' || tool.id === 'mods-general'
+          ? { ...settings.generation, maxTokens: 4096 }
+          : settings.generation,
         systemPrompt: `${NEXUS_IDENTITY} ${tool.systemPrompt}`,
         onChunk: (full) => setOutput(full),
         onActivity: pushActivity,
