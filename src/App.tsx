@@ -6,13 +6,15 @@ import { useAuth } from './state/auth'
 import { useChat } from './state/chat'
 import { RobotMascot, RobotIcon } from './components/RobotMascot'
 import { playNavigate } from './lib/sounds'
+import { OWNER_EMAIL } from './lib/identity'
+import { OwnerView } from './views/OwnerView'
 import { HomeView } from './views/HomeView'
 import { ChatView } from './views/ChatView'
 import { ToolboxView } from './views/ToolboxView'
 import { HistoryView } from './views/HistoryView'
 import { SettingsView } from './views/SettingsView'
 import { AuthView } from './views/AuthView'
-import { Home, MessageSquare, Wrench, Clock, Settings } from 'lucide-react'
+import { Home, MessageSquare, Wrench, Clock, Settings, Shield } from 'lucide-react'
 
 const TABS = [
   { id: 'home', label: 'Home', icon: Home },
@@ -47,7 +49,7 @@ function Splash() {
 export default function App() {
   const { tab, setTab } = useUi()
   const { settings } = useSettings()
-  const { status } = useAuth()
+  const { status, user } = useAuth()
   const { syncNow } = useChat()
 
   useEffect(() => {
@@ -71,12 +73,16 @@ export default function App() {
   if (status === 'loading') return <Splash />
   if (status === 'signedOut') return <AuthView />
 
+  const isOwner = user?.email === OWNER_EMAIL
+  const tabs = isOwner ? [...TABS, { id: 'owner' as const, label: 'Console', icon: Shield }] : TABS
+
   const views: Record<string, ReactNode> = {
     home: <HomeView />,
     chat: <ChatView />,
     toolbox: <ToolboxView />,
     history: <HistoryView />,
     settings: <SettingsView />,
+    owner: <OwnerView />,
   }
 
   return (
@@ -96,7 +102,7 @@ export default function App() {
         </AnimatePresence>
       </main>
       <nav className="bottom-nav">
-        {TABS.map(t => {
+        {tabs.map(t => {
           const Icon = t.icon
           return (
             <button

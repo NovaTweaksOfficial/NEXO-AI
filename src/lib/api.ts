@@ -62,6 +62,63 @@ export async function fetchUsage(base: string): Promise<UsageInfo> {
   return apiRequest<UsageInfo>(base, '/api/usage')
 }
 
+// --------------------------------------------------------------- owner
+export interface OwnerUser {
+  id: string
+  email: string
+  created_at: number
+  conversations: number
+}
+
+export interface Moderation {
+  id: string
+  target_user_id: string | null
+  target_email: string | null
+  ip_display: string | null
+  type: 'soft_ban' | 'ban' | 'ip_ban' | 'timeout'
+  reason: string
+  status: string
+  created_by: string
+  expires_at: number | null
+  created_at: number
+}
+
+export interface OwnerAlert {
+  id: string
+  moderation_id: string
+  title: string
+  detail: string
+  status: string
+  created_at: number
+}
+
+export interface OwnerDashboard {
+  owner: AuthUser
+  users: OwnerUser[]
+  moderations: Moderation[]
+  alerts: OwnerAlert[]
+}
+
+export function fetchOwnerDashboard(base: string, token: string) {
+  return apiRequest<OwnerDashboard>(base, '/api/owner/dashboard', { token })
+}
+
+export function ownerModerate(
+  base: string,
+  token: string,
+  input: { target: string; type: Moderation['type']; reason: string; hours?: number },
+) {
+  return apiRequest(base, '/api/owner/moderate', { method: 'POST', token, body: input })
+}
+
+export function ownerDecision(base: string, token: string, alertId: string, decision: 'accept' | 'decline') {
+  return apiRequest(base, `/api/owner/alerts/${alertId}/decision`, { method: 'POST', token, body: { decision } })
+}
+
+export function ownerRevoke(base: string, token: string, moderationId: string) {
+  return apiRequest(base, `/api/owner/moderate/${moderationId}/revoke`, { method: 'POST', token })
+}
+
 // --------------------------------------------------------------- images
 export async function createImage(
   base: string,

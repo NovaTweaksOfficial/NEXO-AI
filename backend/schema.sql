@@ -44,3 +44,31 @@ CREATE TABLE IF NOT EXISTS usage (
   neurons    REAL NOT NULL DEFAULT 0,
   updated_at INTEGER NOT NULL
 );
+
+-- Owner moderation (FL3SH Console)
+CREATE TABLE IF NOT EXISTS moderation (
+  id            TEXT PRIMARY KEY,
+  target_user_id TEXT,
+  target_email  TEXT,
+  ip_hash       TEXT,
+  ip_display    TEXT,
+  type          TEXT NOT NULL,
+  reason        TEXT NOT NULL,
+  status        TEXT NOT NULL,
+  created_by    TEXT NOT NULL,
+  expires_at    INTEGER,
+  created_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mod_user ON moderation(target_user_id);
+CREATE INDEX IF NOT EXISTS idx_mod_ip ON moderation(ip_hash);
+CREATE INDEX IF NOT EXISTS idx_mod_status ON moderation(status);
+
+CREATE TABLE IF NOT EXISTS owner_alerts (
+  id            TEXT PRIMARY KEY,
+  moderation_id TEXT,
+  title         TEXT NOT NULL,
+  detail        TEXT NOT NULL,
+  status        TEXT NOT NULL,
+  created_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_alerts_status ON owner_alerts(status);
