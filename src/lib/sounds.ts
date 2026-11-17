@@ -86,3 +86,38 @@ export function playBoot(): void {
   tone(495, 0.14, { type: 'sine', gain: 0.025, delay: 0.1 })
   tone(660, 0.18, { type: 'sine', gain: 0.022, delay: 0.2 })
 }
+
+/** Small sparkle for XP and quest rewards. */
+export function playReward(): void {
+  tone(660, 0.09, { type: 'triangle', gain: 0.026 })
+  tone(990, 0.12, { type: 'sine', gain: 0.02, delay: 0.07 })
+}
+
+/** Rising three-note fanfare for a level up. */
+export function playLevelUp(): void {
+  tone(523, 0.12, { type: 'sine', gain: 0.03 })
+  tone(659, 0.14, { type: 'sine', gain: 0.03, delay: 0.1 })
+  tone(784, 0.2, { type: 'triangle', gain: 0.028, delay: 0.2 })
+  tone(1046, 0.24, { type: 'sine', gain: 0.022, delay: 0.3 })
+}
+
+/** Bright ping for an unlocked badge. */
+export function playAchievement(): void {
+  tone(880, 0.1, { type: 'triangle', gain: 0.03 })
+  tone(1320, 0.18, { type: 'sine', gain: 0.022, delay: 0.08 })
+}
+
+/** Tiny pop when a reaction sticker lands. */
+export function playReact(): void {
+  tone(720, 0.06, { type: 'sine', gain: 0.024, slideTo: 980 })
+}
+
+/** Arcade pad press / round clear. */
+export function playGame(win: boolean): void {
+  if (win) {
+    tone(600, 0.08, { type: 'triangle', gain: 0.025 })
+    tone(900, 0.1, { type: 'triangle', gain: 0.022, delay: 0.06 })
+  } else {
+    tone(260, 0.2, { type: 'sawtooth', gain: 0.016, slideTo: 150 })
+  }
+}

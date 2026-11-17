@@ -4,11 +4,13 @@ import { useChat } from '@/state/chat'
 import { useSettings } from '@/state/settings'
 import { useAuth } from '@/state/auth'
 import { useModeration } from '@/state/moderation'
+import { useProgress } from '@/state/progress'
+import { moodFrom, QUICK_REACTIONS } from '@/lib/gamification'
 import { getAdapter } from '@/lib/providers'
 import { NEXUS_IDENTITY } from '@/lib/identity'
 import { uid } from '@/lib/storage'
 import { playSend, playReceive, playError, playTap } from '@/lib/sounds'
-import { RobotIcon } from '@/components/RobotMascot'
+import { RobotIcon, RobotMascot } from '@/components/RobotMascot'
 import {
   compressImage,
   fetchFileObjectUrl,
@@ -20,7 +22,7 @@ import {
 import type { Attachment, ChatMessage } from '@/types'
 import {
   Send, Square, RotateCcw, Copy, Check, ChevronDown, MessageCircle, Code2, Sparkles,
-  GraduationCap, Search, Camera, ImagePlus, Paperclip, X, FileText, Wand2, Film,
+  GraduationCap, Search, Camera, ImagePlus, Paperclip, X, FileText, Wand2, Film, Command,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -87,11 +89,12 @@ function AttachmentImage({ att, token, backend }: { att: Attachment; token: stri
 }
 
 export function ChatView() {
-  const { mode, setMode } = useUi()
+  const { mode, setMode, setPaletteOpen } = useUi()
   const { current, newConversation, select, addMessage, addAttachment, updateMessage, removeMessage, rename } = useChat()
   const { settings, selectedConfig: cfg } = useSettings()
   const { token } = useAuth()
   const { refresh: refreshModeration } = useModeration()
+  const { state, level, award, toggleReaction } = useProgress()
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   // Honest step labels reported by the backend (and by local image work).
@@ -139,6 +142,8 @@ export function ChatView() {
   }, [current?.messages, streaming])
 
   const conv = current
+  const lastAssistantId = [...(conv?.messages ?? [])].reverse().find(m => m.role === 'assistant' && m.content)?.id
+  const companionMood = moodFrom(state.lastAction, level.level, state.streak)
 
   const addFiles = async (list: FileList | null) => {
     if (!list || list.length === 0) return
@@ -264,6 +269,11 @@ export function ChatView() {
           assistantMsg.id,
           kind === 'gif' ? "Here's your animated GIF." : "Here's your image. Want it changed? Type /edit with a photo attached.",
         )
+        award(`image-${assistantMsg.id}`, kind === 'image' ? 18 : 20, {
+          stats: { images: 1 },
+          lastAction: 'image',
+          extraTitle: kind === 'gif' ? 'Animated GIF created' : kind === 'edit' ? 'Photo edited' : 'Image created',
+        })
       } catch (e: any) {
         if (e?.status === 403) { void refreshModeration(); return }
         setError(e?.message || 'Could not create that image.')
@@ -318,8 +328,10 @@ export function ChatView() {
     const ac = new AbortController()
     abortRef.current = ac
     let failed = false
+    let aborted = false
+    let replyText = ''
     try {
-      await adapter.chat(runtimeCfg, {
+      replyText = await adapter.chat(runtimeCfg, {
         messages: historyForModel,
         model,
         settings: settings.generation,
@@ -337,6 +349,7 @@ export function ChatView() {
         // of waiting for the next moderation poll.
         void refreshModeration()
       } else if (e?.name === 'AbortError') {
+        aborted = true
         // keep partial
       } else {
         failed = true
@@ -346,7 +359,19 @@ export function ChatView() {
         updateMessage(activeConv.id, assistantMsg.id, `⚠️ ${msg}`)
       }
     } finally {
-      if (!failed) playReceive()
+      if (!failed && !aborted) {
+        playReceive()
+        if (replyText.trim()) {
+          const hour = new Date().getHours()
+          const isNight = hour >= 22 || hour < 4
+          award(`chat-${assistantMsg.id}`, 12 + (attachments.length ? 4 : 0), {
+            mode,
+            stats: { messages: 1, ...(isNight ? { night: 1 } : {}) },
+            lastAction: 'chat',
+            extraTitle: `${MODES.find(m => m.id === mode)?.label || 'General'} reply`,
+          })
+        }
+      }
       setStreaming(false)
       abortRef.current = null
     }
@@ -398,13 +423,29 @@ export function ChatView() {
             </div>
           )}
         </div>
-        <button className="btn ghost" onClick={() => { playTap(); select(null) }} style={{ padding: '6px 10px' }}>New</button>
+        <div className="row" style={{ gap: 6 }}>
+          <span className="chat-level-pill">Lv {level.level}</span>
+          <button className="btn ghost" style={{ padding: '6px 8px' }} onClick={() => { playTap(); setPaletteOpen(true) }} aria-label="Open command palette">
+            <Command size={16} />
+          </button>
+          <button className="btn ghost" onClick={() => { playTap(); select(null) }} style={{ padding: '6px 10px' }}>New</button>
+        </div>
       </div>
 
       {/* messages */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '0 12px 12px' }}>
         {(!conv || conv.messages.length === 0) && (
           <div className="empty-state">
+            {settings.companion && (
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
+                <RobotMascot
+                  size={86}
+                  mood={companionMood}
+                  trackCursor={!settings.reducedMotion}
+                  speech="Ask me anything."
+                />
+              </div>
+            )}
             <div style={{ fontSize: 18, marginBottom: 8 }}>Start a conversation</div>
             <div style={{ fontSize: 13 }}>Type a message, take a photo, or upload a file.</div>
             <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 6 }}>
@@ -438,13 +479,46 @@ export function ChatView() {
                 <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
               )}
               {m.role === 'assistant' && m.content && (
-                <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
-                  <button className="btn ghost" style={{ padding: '2px 6px', fontSize: 11 }} onClick={() => copy(m.id, m.content)}>
-                    {copiedId === m.id ? <Check size={12} /> : <Copy size={12} />} Copy
-                  </button>
-                  <button className="btn ghost" style={{ padding: '2px 6px', fontSize: 11 }} onClick={() => regenerate(m.id)} disabled={streaming}>
-                    <RotateCcw size={12} /> Regenerate
-                  </button>
+                <div style={{ marginTop: 6 }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button className="btn ghost" style={{ padding: '2px 6px', fontSize: 11 }} onClick={() => copy(m.id, m.content)}>
+                      {copiedId === m.id ? <Check size={12} /> : <Copy size={12} />} Copy
+                    </button>
+                    <button className="btn ghost" style={{ padding: '2px 6px', fontSize: 11 }} onClick={() => regenerate(m.id)} disabled={streaming}>
+                      <RotateCcw size={12} /> Regenerate
+                    </button>
+                  </div>
+                  {settings.funMode && (
+                    <div className="reaction-row" aria-label="React to this reply">
+                      {QUICK_REACTIONS.map(emoji => {
+                        const active = state.reactions[m.id] === emoji
+                        return (
+                          <button
+                            key={emoji}
+                            className={`reaction-chip ${active ? 'active' : ''}`}
+                            onClick={() => toggleReaction(m.id, emoji)}
+                            aria-label={`React ${emoji}`}
+                            aria-pressed={active}
+                          >
+                            {emoji}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                  {!streaming && m.id === lastAssistantId && (
+                    <div className="followup-row">
+                      {['Make it shorter', 'Explain it simpler', 'Give me an example', 'Turn it into a list'].map(label => (
+                        <button
+                          key={label}
+                          className="followup-chip"
+                          onClick={() => send(`Using your last answer, ${label.toLowerCase()}.`)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

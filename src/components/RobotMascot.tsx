@@ -1,5 +1,6 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
+import type { RobotMood } from '@/lib/gamification'
 
 export function RobotIcon({ size = 20, className = '' }: { size?: number; className?: string }) {
   return (
@@ -18,9 +19,15 @@ interface Props {
   className?: string
   /** When true, the eyes follow a nearby cursor and the robot reacts. */
   trackCursor?: boolean
+  /** Changes eye color and expression to match what NEXUS just did. */
+  mood?: RobotMood
+  /** Optional speech bubble above the robot. */
+  speech?: string
+  /** Makes the companion tappable (mouse and keyboard). */
+  onClick?: () => void
 }
 
-export function RobotMascot({ size = 96, className = '', trackCursor = false }: Props) {
+export function RobotMascot({ size = 96, className = '', trackCursor = false, mood = 'idle', speech, onClick }: Props) {
   const rawId = useId().replace(/[^a-zA-Z0-9]/g, '')
   const ids = {
     metal: `metal-${rawId}`,
@@ -82,16 +89,42 @@ export function RobotMascot({ size = 96, className = '', trackCursor = false }: 
   }, [reduce])
 
   const spring = { type: 'spring' as const, stiffness: 170, damping: 18 }
+  const accent = mood === 'excited'
+    ? '#f472b6'
+    : mood === 'happy'
+      ? '#22d3ee'
+      : mood === 'focused'
+        ? '#60a5fa'
+        : '#a78bfa'
+  const smiling = mood === 'happy' || mood === 'excited'
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!onClick) return
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onClick()
+    }
+  }
 
   return (
     <motion.div
       ref={ref}
       className={`float-anim ${className}`}
-      style={{ width: size, height: size, position: 'relative' }}
+      style={{ width: size, height: size, position: 'relative', cursor: onClick ? 'pointer' : undefined }}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-label={onClick ? 'Talk to NEXUS companion' : undefined}
+      onClick={onClick}
+      onKeyDown={onKeyDown}
       initial={{ opacity: 0, scale: 0.8 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.6 }}
     >
+      {speech && (
+        <div className="robot-speech" role="status">
+          {speech}
+          <span className="robot-speech-tail" aria-hidden="true" />
+        </div>
+      )}
       <svg viewBox="0 0 120 120" width={size} height={size} xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id={ids.metal} x1="0" y1="0" x2="1" y2="1">
@@ -104,8 +137,8 @@ export function RobotMascot({ size = 96, className = '', trackCursor = false }: 
             <stop offset="100%" stopColor="#1a1a30" />
           </linearGradient>
           <radialGradient id={ids.eyeGlow} cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#a78bfa" />
-            <stop offset="60%" stopColor="#8b5cf6" />
+            <stop offset="0%" stopColor={accent} />
+            <stop offset="60%" stopColor={accent} stopOpacity="0.75" />
             <stop offset="100%" stopColor="#3b82f6" />
           </radialGradient>
           <filter id={ids.glow} x="-50%" y="-50%" width="200%" height="200%">
@@ -161,11 +194,18 @@ export function RobotMascot({ size = 96, className = '', trackCursor = false }: 
             <rect x="68" y="52" width="6" height="3" rx="1.5" fill="#fff" opacity={blink ? 0 : 0.7} />
           </g>
 
-          {/* mouth reacts to cursor: a small smile when noticed */}
-          <rect
-            x={near ? 43 : 46} y="70" width={near ? 34 : 28} height="4" rx="2" fill="#8b5cf6"
-            opacity={near ? 1 : 0.8}
-          />
+          {/* mouth reacts to cursor and mood */}
+          {smiling ? (
+            <path
+              d={mood === 'excited' ? 'M 42 69 Q 60 83 78 69' : 'M 45 70 Q 60 78 75 70'}
+              fill="none" stroke={accent} strokeWidth="4" strokeLinecap="round"
+            />
+          ) : (
+            <rect
+              x={near ? 43 : 46} y="70" width={near ? 34 : 28} height="4" rx="2" fill={accent}
+              opacity={near ? 1 : 0.8}
+            />
+          )}
 
           {/* side bolts */}
           <circle cx="28" cy="60" r="3" fill="#3b82f6" filter={`url(#${ids.softGlow})`} />

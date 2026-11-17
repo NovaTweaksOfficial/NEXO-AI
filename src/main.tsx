@@ -5,6 +5,7 @@ import { AuthProvider } from './state/auth'
 import { ModerationProvider } from './state/moderation'
 import { ChatProvider } from './state/chat'
 import { UiProvider } from './state/ui'
+import { ProgressProvider } from './state/progress'
 import App from './App'
 import './styles/app.css'
 import 'highlight.js/styles/github-dark.css'
@@ -24,7 +25,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <ModerationProvider>
           <ChatProvider>
             <UiProvider>
-              <App />
+              <ProgressProvider>
+                <App />
+              </ProgressProvider>
             </UiProvider>
           </ChatProvider>
         </ModerationProvider>

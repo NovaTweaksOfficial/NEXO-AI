@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { useSettings } from '@/state/settings'
 import { useChat } from '@/state/chat'
 import { useAuth } from '@/state/auth'
+import { useProgress } from '@/state/progress'
 import { getAdapter } from '@/lib/providers'
 import { fetchUsage, type UsageInfo } from '@/lib/api'
 import { playTap } from '@/lib/sounds'
 import { RobotIcon } from '@/components/RobotMascot'
-import { Wifi, Check, X, LogOut, UserCircle2, Cloud, Activity, RefreshCw, Zap, Volume2 } from 'lucide-react'
+import { Wifi, Check, X, LogOut, UserCircle2, Cloud, Activity, RefreshCw, Zap, Volume2, Trophy, Flame, RotateCcw } from 'lucide-react'
 
 function Toggle({ on, onChange, label }: { on: boolean; onChange: () => void; label: string }) {
   return (
@@ -32,6 +33,7 @@ export function SettingsView() {
   const { settings, update, selectedConfig } = useSettings()
   const { clearAll, resetLocal, syncedCount, syncing } = useChat()
   const { status, user, signout, openAuth } = useAuth()
+  const { state: progress, level, reset } = useProgress()
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [testing, setTesting] = useState(false)
   const [usage, setUsage] = useState<UsageInfo | null>(null)
@@ -313,6 +315,63 @@ export function SettingsView() {
             onChange={() => { playTap(); update({ reducedMotion: !settings.reducedMotion }) }}
           />
         </div>
+      </div>
+
+      {/* Fun & progress */}
+      <div className="glass" style={{ padding: 14, marginBottom: 12 }}>
+        <div className="row" style={{ gap: 8 }}>
+          <Trophy size={16} style={{ color: 'var(--purple-2)' }} />
+          <strong style={{ fontSize: 14 }}>Fun & progress</strong>
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '6px 0 10px', lineHeight: 1.5 }}>
+          XP, streaks, badges, quests, and message stickers are stored locally for this identity. Nothing is sent to a server.
+        </div>
+        <div className="home-stats" style={{ marginBottom: 12 }}>
+          <div><strong>{level.level}</strong><span>level</span></div>
+          <div><strong>{progress.xp}</strong><span>XP</span></div>
+          <div><strong>{progress.streak}</strong><span>streak</span></div>
+          <div><strong>{Object.keys(progress.achievements).length}</strong><span>badges</span></div>
+        </div>
+        <div className="row" style={{ justifyContent: 'space-between', gap: 10 }}>
+          <div className="row" style={{ gap: 8 }}>
+            <Zap size={15} style={{ color: 'var(--purple-2)' }} />
+            <div>
+              <div style={{ fontSize: 12.5 }}>Fun progress</div>
+              <div style={{ fontSize: 10.5, color: 'var(--text-3)' }}>XP, quests, badges, and celebrations</div>
+            </div>
+          </div>
+          <Toggle
+            label="Fun progress"
+            on={!!settings.funMode}
+            onChange={() => { playTap(); update({ funMode: !settings.funMode }) }}
+          />
+        </div>
+        <div className="row" style={{ justifyContent: 'space-between', gap: 10, marginTop: 12 }}>
+          <div className="row" style={{ gap: 8 }}>
+            <Flame size={15} style={{ color: 'var(--purple-2)' }} />
+            <div>
+              <div style={{ fontSize: 12.5 }}>NEXUS companion</div>
+              <div style={{ fontSize: 10.5, color: 'var(--text-3)' }}>Clickable robot with moods and speech</div>
+            </div>
+          </div>
+          <Toggle
+            label="NEXUS companion"
+            on={!!settings.companion}
+            onChange={() => { playTap(); update({ companion: !settings.companion }) }}
+          />
+        </div>
+        <button
+          className="btn danger"
+          style={{ marginTop: 12 }}
+          onClick={() => {
+            if (confirm('Reset local XP, streaks, badges, quests, and stickers? Your chats are not affected.')) {
+              playTap()
+              reset()
+            }
+          }}
+        >
+          <RotateCcw size={14} /> Reset progress
+        </button>
       </div>
 
       {/* Privacy */}

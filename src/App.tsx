@@ -7,6 +7,9 @@ import { useChat } from './state/chat'
 import { useModeration } from './state/moderation'
 import { RestrictionLock } from './components/RestrictionLock'
 import { RobotMascot, RobotIcon } from './components/RobotMascot'
+import { CommandPalette } from './components/CommandPalette'
+import { Arcade } from './components/Arcade'
+import { Celebrations } from './components/Celebrations'
 import { playNavigate } from './lib/sounds'
 import { HomeView } from './views/HomeView'
 import { ChatView } from './views/ChatView'
@@ -47,7 +50,7 @@ function Splash() {
 }
 
 export default function App() {
-  const { tab, setTab } = useUi()
+  const { tab, setTab, setPaletteOpen, setArcadeOpen } = useUi()
   const { settings } = useSettings()
   const { status } = useAuth()
   const { restriction, checking } = useModeration()
@@ -58,6 +61,22 @@ export default function App() {
     document.documentElement.setAttribute('data-accent', settings.accent)
     document.documentElement.setAttribute('data-motion', settings.reducedMotion ? 'off' : 'on')
   }, [settings.theme, settings.accent, settings.reducedMotion])
+
+  // Global shortcuts: ⌘K / Ctrl+K opens the command palette anywhere in the
+  // signed-in app; Escape closes whichever overlay is on top.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setPaletteOpen(open => !open)
+      } else if (event.key === 'Escape') {
+        setPaletteOpen(false)
+        setArcadeOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [setPaletteOpen, setArcadeOpen])
 
   // Flush pending conversation changes when the app is backgrounded.
   useEffect(() => {
@@ -85,6 +104,12 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <div className="nexus-aurora" aria-hidden="true">
+        <span className="aurora-orb aurora-orb-1" />
+        <span className="aurora-orb aurora-orb-2" />
+        <span className="aurora-orb aurora-orb-3" />
+        <span className="aurora-grid" />
+      </div>
       <main style={{ flex: 1, overflow: 'auto' }}>
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
@@ -117,6 +142,9 @@ export default function App() {
           )
         })}
       </nav>
+      <CommandPalette />
+      <Arcade />
+      <Celebrations />
     </div>
   )
 }

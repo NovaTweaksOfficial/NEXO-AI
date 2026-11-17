@@ -1,4 +1,4 @@
-const VERSION = 'v1'
+const VERSION = 'v2'
 const SHELL_CACHE = `nexus-shell-${VERSION}`
 const ASSET_CACHE = `nexus-assets-${VERSION}`
 

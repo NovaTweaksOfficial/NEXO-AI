@@ -38,6 +38,16 @@ npm run preview
 - **Activity labels:** instead of a generic "..." indicator, Chat and Toolbox show what NEXUS is actually doing as it works — `read` / `read image` / `read file` for attachments, `webfetch` then `fetched web search` for live search, `grep` when relevant snippets are selected, `coding` or `write` for the reply, `shell` when real command steps appear in the answer, and `edit` / `generate` for image commands. Labels come from real Worker steps, never simulated tool calls.
 - **Modding help:** Toolbox includes **Gorilla Tag Mods** and **MODS (General)**. They produce the finished mod files — complete C# classes, patches, project file, and folder layout — instead of a lesson. Large build requests use the full output budget, and if the reply hits the model's cap NEXUS automatically continues until the deliverable is complete. Offline/private testing is emphasized.
 
+## Fun, progress, and shortcuts
+
+- **Operator progress:** real replies, images, tool runs, and reactions earn local XP. Levels, daily streaks, best streak, and lifetime stats are stored per identity (guest or account) on the device. Nothing about progress is sent to a server.
+- **Daily quests and badges:** four rotating daily quests and 15 achievement badges give short goals without adding chat limits. A daily claim rewards streaks once per day.
+- **Command palette:** press `⌘K` / `Ctrl+K` (or the header button) to jump to tabs, modes, tools, image commands, theme/sound settings, and the daily claim.
+- **Companion:** the robot has moods, reacts to your cursor, and speaks when tapped. It can be turned off in Settings.
+- **Message stickers:** react to replies with quick emoji; reactions are saved per identity. Follow-up chips rerun the last answer with a simpler or shorter phrasing.
+- **NEXUS Circuit:** an offline memory game in Home with a local best score. It uses no AI and awards XP only for a genuinely new best.
+- **Celebrations:** level-ups, badges, and quest clears get small synthesized toasts. All effects respect the existing sound and reduced-motion settings.
+
 The AI is white-labeled as **NEXUS** / **NEXUS Core** in both the app and the server system prompt.
 
 ## Backend (Cloudflare Worker)

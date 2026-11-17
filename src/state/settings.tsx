@@ -27,6 +27,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   soundEffects: true,
   saveHistory: true,
   fastReplies: false,
+  funMode: true,
+  companion: true,
 }
 
 interface Ctx {

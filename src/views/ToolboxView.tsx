@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSettings } from '@/state/settings'
+import { useUi } from '@/state/ui'
+import { useProgress } from '@/state/progress'
 import { useAuth } from '@/state/auth'
 import { useModeration } from '@/state/moderation'
 import { getAdapter } from '@/lib/providers'
@@ -54,8 +56,18 @@ const TOOLS: ToolDef[] = [
 ]
 
 export function ToolboxView() {
+  const { settings } = useSettings()
+  const { pendingTool, setPendingTool } = useUi()
   const [active, setActive] = useState<string | null>(null)
   const tool = TOOLS.find(t => t.id === active)
+
+  // Home suggestions and the command palette can open a specific tool.
+  useEffect(() => {
+    if (pendingTool && TOOLS.some(t => t.id === pendingTool)) {
+      setActive(pendingTool)
+      setPendingTool(null)
+    }
+  }, [pendingTool, setPendingTool])
 
   if (!tool) {
     return (
@@ -65,7 +77,10 @@ export function ToolboxView() {
           {TOOLS.map(t => (
             <button key={t.id} className="glass" style={{ padding: 14, textAlign: 'left', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--text)' }} onClick={() => { playTap(); setActive(t.id) }}>
               <div style={{ fontSize: 24, marginBottom: 6 }}>{t.icon}</div>
-              <div style={{ fontWeight: 600, fontSize: 13 }}>{t.name}</div>
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{t.name}</div>
+                {settings.funMode && <span className="tool-xp">+14 XP</span>}
+              </div>
               <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{t.description}</div>
             </button>
           ))}
@@ -80,6 +95,7 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
   const { settings, selectedConfig: cfg } = useSettings()
   const { token } = useAuth()
   const { refresh: refreshModeration } = useModeration()
+  const { award } = useProgress()
   const [input, setInput] = useState('')
   const [output, setOutput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -96,6 +112,8 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
     if (!input.trim() || loading) return
     if (!cfg) { playError(); setError('No AI provider configured. Go to Settings.'); return }
     playSend()
+    const runId = uid()
+    let succeeded = false
     setLoading(true); setError(null); setOutput('')
     setActivities([])
     pushActivity(tool.id === 'gorilla-tag-mods' || tool.id === 'mods-general' ? 'coding' : 'read')
@@ -120,13 +138,21 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
         onChunk: (full) => setOutput(full),
         onActivity: pushActivity,
       })
-      if (!output) setOutput(text)
+      setOutput(text)
+      if (text.trim()) {
+        succeeded = true
+        award(`tool-${runId}`, 14, {
+          stats: { tools: 1 },
+          lastAction: 'tool',
+          extraTitle: tool.name,
+        })
+      }
     } catch (e: any) {
       if (e?.status === 403) { void refreshModeration(); return }
       playError()
       setError(e?.message || 'Failed.')
     } finally {
-      playReceive()
+      if (succeeded) playReceive()
       setLoading(false)
     }
   }
