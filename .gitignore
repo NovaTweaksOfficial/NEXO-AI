@@ -8,3 +8,6 @@ dist/
 backend/.wrangler/
 backend/node_modules/
 backend/.dev.vars
+
+*.dmg
+*.exe

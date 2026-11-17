@@ -62,6 +62,19 @@ export async function fetchUsage(base: string): Promise<UsageInfo> {
   return apiRequest<UsageInfo>(base, '/api/usage')
 }
 
+// --------------------------------------------------------------- images
+export async function createImage(
+  base: string,
+  token: string | null,
+  options: { prompt: string; mode: 'generate' | 'edit' | 'gif'; image?: { fileId?: string; dataUrl?: string; mime?: string } },
+): Promise<{ id?: string; dataUrl?: string; mime: string; size: number; name: string }> {
+  return apiRequest(base, '/api/image', {
+    method: 'POST',
+    ...(token ? { token } : {}),
+    body: options,
+  })
+}
+
 // --------------------------------------------------------------- auth
 export async function register(base: string, email: string, password: string) {
   return apiRequest<{ token: string; user: AuthUser }>(base, '/api/auth/register', {

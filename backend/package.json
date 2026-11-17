@@ -9,6 +9,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "gifenc": "^1.0.3",
+    "jpeg-js": "^0.4.4",
     "unpdf": "^2.2.1"
   },
   "devDependencies": {

@@ -6,6 +6,8 @@ import {
   defaultBaseUrl,
   apiKeyFor,
 } from './providers'
+import { GIFEncoder, quantize, applyPalette } from 'gifenc'
+import jpeg from 'jpeg-js'
 
 export interface Env {
   DB: D1Database
@@ -129,6 +131,8 @@ const FREE_NEURONS_PER_DAY = 10_000
 const NEURON_RATES = {
   text: { input: 26_668, output: 204_805 },   // llama-3.3-70b-instruct-fp8-fast
   vision: { input: 31_876, output: 50_488 },  // mistral-small-3.1-24b-instruct
+  image: 58,                                  // flux-1-schnell, 4 steps, 1024²
+  edit: 120,                                  // flux-2-klein-4b with one reference
 }
 
 function utcDay(): string {
@@ -260,6 +264,120 @@ function decodeDataUrl(dataUrl: string): Uint8Array | null {
   } catch {
     return null
   }
+}
+
+function base64ToBytes(b64: string): Uint8Array {
+  const raw = atob(b64)
+  const bytes = new Uint8Array(raw.length)
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i)
+  return bytes
+}
+
+// ------------------------------------------------------- image generation
+function downscaleJpeg(bytes: Uint8Array, max: number): Uint8Array {
+  try {
+    const img = jpeg.decode(bytes, { useTArray: true })
+    const scale = Math.min(1, max / Math.max(img.width, img.height))
+    const w = Math.max(1, Math.round(img.width * scale))
+    const h = Math.max(1, Math.round(img.height * scale))
+    const out = new Uint8ClampedArray(w * h * 4)
+    for (let y = 0; y < h; y++) {
+      const sy = Math.min(img.height - 1, Math.floor(y * img.height / h))
+      for (let x = 0; x < w; x++) {
+        const sx = Math.min(img.width - 1, Math.floor(x * img.width / w))
+        const src = (sy * img.width + sx) * 4
+        const dst = (y * w + x) * 4
+        out[dst] = img.data[src]
+        out[dst + 1] = img.data[src + 1]
+        out[dst + 2] = img.data[src + 2]
+        out[dst + 3] = 255
+      }
+    }
+    return jpeg.encode({ data: out, width: w, height: h }, 80).data
+  } catch {
+    return bytes
+  }
+}
+
+async function runImageModel(
+  env: Env,
+  prompt: string,
+  reference?: { data: Uint8Array; mime: string },
+): Promise<Uint8Array> {
+  const cleanPrompt = prompt.slice(0, 1024)
+  if (reference) {
+    try {
+      const form = new FormData()
+      const resized = downscaleJpeg(reference.data, 512)
+      form.append('input_image_0', new Blob([resized], { type: 'image/jpeg' }), 'input.jpg')
+      form.append('prompt',
+        'Keep the exact same subject, composition, pose, background, and all existing details from image 0 unchanged. ' +
+        `Apply only this edit: ${cleanPrompt}. Do not redraw or replace the subject.`)
+      form.append('width', '1024')
+      form.append('height', '1024')
+      const formResponse = new Response(form)
+      const out: any = await (env.AI as any).run('@cf/black-forest-labs/flux-2-klein-4b', {
+        multipart: {
+          body: formResponse.body,
+          contentType: formResponse.headers.get('content-type') || 'multipart/form-data',
+        },
+      } as any)
+      if (out?.image) return base64ToBytes(String(out.image))
+    } catch (e: any) {
+      console.error('image edit failed', e?.message || e)
+      throw new Error('NEXUS could not edit that image. Try another photo or prompt.')
+    }
+  }
+  const out: any = await (env.AI as any).run('@cf/black-forest-labs/flux-1-schnell', {
+    prompt: cleanPrompt,
+    steps: 4,
+  } as any)
+  if (!out?.image) throw new Error('The image engine did not return an image.')
+  return base64ToBytes(String(out.image))
+}
+
+/** Turn one generated still into a short animated GIF with a gentle zoom/pan. */
+function makeAnimatedGif(jpegBytes: Uint8Array, frameCount = 6, size = 384, delay = 110): Uint8Array {
+  const decoded = jpeg.decode(jpegBytes, { useTArray: true })
+  const base = new Uint8ClampedArray(size * size * 4)
+  for (let y = 0; y < size; y++) {
+    const sy = Math.min(decoded.height - 1, Math.floor(y * decoded.height / size))
+    for (let x = 0; x < size; x++) {
+      const sx = Math.min(decoded.width - 1, Math.floor(x * decoded.width / size))
+      const src = (sy * decoded.width + sx) * 4
+      const dst = (y * size + x) * 4
+      base[dst] = decoded.data[src]
+      base[dst + 1] = decoded.data[src + 1]
+      base[dst + 2] = decoded.data[src + 2]
+      base[dst + 3] = 255
+    }
+  }
+
+  const gif = GIFEncoder()
+  for (let f = 0; f < frameCount; f++) {
+    const t = f / Math.max(1, frameCount - 1)
+    const zoom = 1 + 0.06 * t
+    const panX = Math.round((t - 0.5) * size * 0.05)
+    const panY = Math.round((0.5 - t) * size * 0.03)
+    const frame = new Uint8ClampedArray(size * size * 4)
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const sx = Math.max(0, Math.min(size - 1, Math.round((x - size / 2) / zoom + size / 2 - panX)))
+        const sy = Math.max(0, Math.min(size - 1, Math.round((y - size / 2) / zoom + size / 2 - panY)))
+        const src = (sy * size + sx) * 4
+        const dst = (y * size + x) * 4
+        frame[dst] = base[src]
+        frame[dst + 1] = base[src + 1]
+        frame[dst + 2] = base[src + 2]
+        frame[dst + 3] = 255
+      }
+    }
+    const palette = quantize(frame, 128)
+    const indexed = applyPalette(frame, palette)
+    gif.writeFrame(indexed, size, size, { palette, delay })
+  }
+  gif.finish()
+  return new Uint8Array(gif.bytes())
 }
 
 // ---------------------------------------------------------------- documents
@@ -552,6 +670,59 @@ export default {
             ...cors,
           },
         })
+      }
+
+      // ------------------------------------------------------------- images
+      if (path === '/api/image' && req.method === 'POST') {
+        const body = await parseBody(req)
+        const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : ''
+        const mode = ['generate', 'edit', 'gif'].includes(body?.mode) ? body.mode : 'generate'
+        if (!prompt) return json({ error: 'Describe the image you want.' }, 400, cors)
+        if (prompt.length > 1024) return json({ error: 'Prompt is too long.' }, 400, cors)
+
+        const user = await getUser(req, env)
+        let reference: { data: Uint8Array; mime: string } | undefined
+        if (mode === 'edit') {
+          const image = body?.image || {}
+          let bytes: Uint8Array | null = null
+          if (typeof image.dataUrl === 'string' && image.dataUrl.startsWith('data:')) {
+            bytes = decodeDataUrl(image.dataUrl)
+          } else if (typeof image.fileId === 'string' && user) {
+            const row: any = await env.DB.prepare(
+              'SELECT data FROM files WHERE id = ? AND user_id = ?',
+            ).bind(image.fileId, user.id).first()
+            if (row?.data) {
+              const raw: any = row.data
+              bytes = raw instanceof Uint8Array ? raw : new Uint8Array(raw)
+            }
+          }
+          if (!bytes || bytes.length === 0) {
+            return json({ error: 'Attach a photo to edit.' }, 400, cors)
+          }
+          reference = { data: bytes, mime: typeof image.mime === 'string' ? image.mime : 'image/jpeg' }
+        }
+
+        try {
+          const still = await runImageModel(env, prompt, reference)
+          const isGif = mode === 'gif'
+          const bytes = isGif ? makeAnimatedGif(still) : still
+          const mime = isGif ? 'image/gif' : 'image/jpeg'
+          const name = `${mode}-${Date.now()}.${isGif ? 'gif' : 'jpg'}`
+          const dataUrl = `${mime === 'image/gif' ? 'data:image/gif' : 'data:image/jpeg'};base64,${bytesToBase64(bytes)}`
+
+          let id: string | undefined
+          if (user && bytes.length <= 6_000_000) {
+            id = randomHex(16)
+            await env.DB.prepare(
+              'INSERT INTO files (id, user_id, name, mime, size, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            ).bind(id, user.id, name, mime, bytes.length, bytes, Date.now()).run()
+          }
+          await recordUsage(env, 0, 1, mode === 'edit' ? NEURON_RATES.edit : NEURON_RATES.image)
+          return json({ id, dataUrl: id ? undefined : dataUrl, mime, size: bytes.length, name }, 200, cors)
+        } catch (e: any) {
+          console.error('image generation failed', e?.message || e)
+          return json({ error: 'NEXUS could not create that image. Try a different prompt.' }, 502, cors)
+        }
       }
 
       // --------------------------------------------------- conversations

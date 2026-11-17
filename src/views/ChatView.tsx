@@ -6,7 +6,7 @@ import { useAuth } from '@/state/auth'
 import { getAdapter } from '@/lib/providers'
 import { NEXUS_IDENTITY } from '@/lib/identity'
 import { uid } from '@/lib/storage'
-import { playSend, playReceive, playError } from '@/lib/sounds'
+import { playSend, playReceive, playError, playTap } from '@/lib/sounds'
 import { RobotIcon } from '@/components/RobotMascot'
 import {
   compressImage,
@@ -14,11 +14,12 @@ import {
   fileToDataUrl,
   readTextFile,
   uploadFile,
+  createImage,
 } from '@/lib/api'
 import type { Attachment, ChatMessage } from '@/types'
 import {
   Send, Square, RotateCcw, Copy, Check, ChevronDown, MessageCircle, Code2, Sparkles,
-  GraduationCap, Search, Camera, ImagePlus, Paperclip, X, FileText,
+  GraduationCap, Search, Camera, ImagePlus, Paperclip, X, FileText, Wand2, Film,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -86,7 +87,7 @@ function AttachmentImage({ att, token, backend }: { att: Attachment; token: stri
 
 export function ChatView() {
   const { mode, setMode } = useUi()
-  const { current, newConversation, addMessage, updateMessage, removeMessage, rename } = useChat()
+  const { current, newConversation, addMessage, addAttachment, updateMessage, removeMessage, rename } = useChat()
   const { settings, selectedConfig: cfg } = useSettings()
   const { token } = useAuth()
   const [input, setInput] = useState('')
@@ -101,6 +102,7 @@ export function ChatView() {
   const cameraRef = useRef<HTMLInputElement>(null)
   const photosRef = useRef<HTMLInputElement>(null)
   const filesRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // pending prompt from home
   const autoSendRef = useRef<string | null>(null)
@@ -212,6 +214,50 @@ export function ChatView() {
 
     if (conv.messages.length === 0) {
       rename(conv.id, text.slice(0, 40))
+    }
+
+    // Image commands: /image <prompt>, /edit <prompt> (with a photo attached),
+    // and /gif <prompt> (an animated GIF made from one generated still).
+    const command = raw.match(/^\/(image|edit|gif)\s+([\s\S]+)$/i)
+    if (command) {
+      const kind = command[1].toLowerCase() as 'image' | 'edit' | 'gif'
+      const imagePrompt = command[2].trim()
+      const reference = attachments.find(a => a.kind === 'image' && (a.fileId || a.dataUrl))
+      if (kind === 'edit' && !reference) {
+        setError('Attach a photo first, then use /edit with what you want changed.')
+        updateMessage(conv.id, assistantMsg.id, 'Attach a photo first, then try /edit again.')
+        return
+      }
+      setStreaming(true)
+      try {
+        const result = await createImage(settings.backendUrl, token, {
+          prompt: imagePrompt,
+          mode: kind === 'image' ? 'generate' : kind,
+          ...(kind === 'edit' && reference
+            ? { image: { fileId: reference.fileId, dataUrl: reference.dataUrl, mime: reference.mime } }
+            : {}),
+        })
+        addAttachment(conv.id, assistantMsg.id, {
+          id: uid(),
+          kind: 'image',
+          name: result.name,
+          mime: result.mime,
+          size: result.size,
+          fileId: result.id,
+          dataUrl: result.dataUrl,
+        })
+        updateMessage(
+          conv.id,
+          assistantMsg.id,
+          kind === 'gif' ? "Here's your animated GIF." : "Here's your image. Want it changed? Type /edit with a photo attached.",
+        )
+      } catch (e: any) {
+        setError(e?.message || 'Could not create that image.')
+        updateMessage(conv.id, assistantMsg.id, `⚠️ ${e?.message || 'Could not create that image.'}`)
+      } finally {
+        setStreaming(false)
+      }
+      return
     }
 
     const config = cfg
@@ -340,6 +386,9 @@ export function ChatView() {
           <div className="empty-state">
             <div style={{ fontSize: 18, marginBottom: 8 }}>Start a conversation</div>
             <div style={{ fontSize: 13 }}>Type a message, take a photo, or upload a file.</div>
+            <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 6 }}>
+              Try <strong>/image</strong> a purple robot, <strong>/gif</strong> a neon planet, or attach a photo and use <strong>/edit</strong>.
+            </div>
           </div>
         )}
         {conv?.messages.map(m => (
@@ -417,7 +466,19 @@ export function ChatView() {
               {preparing ? <RobotIcon size={18} className="spin" /> : <Paperclip size={18} />}
             </button>
           </div>
+          <div style={{ display: 'flex', gap: 2, paddingBottom: 4, paddingLeft: 6, marginLeft: 2, borderLeft: '1px solid var(--border)' }}>
+            <button className="btn ghost" style={{ padding: 8 }} title="Generate an image (/image)" onClick={() => { playTap(); setInput(v => `${v.trim() ? `${v.trim()} ` : ''}/image `); textareaRef.current?.focus() }} disabled={streaming}>
+              <Sparkles size={18} style={{ color: 'var(--purple-2)' }} />
+            </button>
+            <button className="btn ghost" style={{ padding: 8 }} title="Edit attached photo (/edit)" onClick={() => { playTap(); setInput(v => `${v.trim() ? `${v.trim()} ` : ''}/edit `); textareaRef.current?.focus() }} disabled={streaming}>
+              <Wand2 size={18} style={{ color: 'var(--purple-2)' }} />
+            </button>
+            <button className="btn ghost" style={{ padding: 8 }} title="Make an animated GIF (/gif)" onClick={() => { playTap(); setInput(v => `${v.trim() ? `${v.trim()} ` : ''}/gif `); textareaRef.current?.focus() }} disabled={streaming}>
+              <Film size={18} style={{ color: 'var(--purple-2)' }} />
+            </button>
+          </div>
           <textarea
+            ref={textareaRef}
             className="textarea"
             rows={1}
             value={input}

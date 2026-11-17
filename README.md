@@ -32,6 +32,7 @@ npm run preview
 - **Synced chats:** signed-in conversations are stored in Cloudflare D1 and synced across devices. Guest chats stay on the current device; signing in carries them over once if the account is empty.
 - **Photos:** the camera button, photo-library button, and file picker all attach images. Images are downsized in the browser, then read by a server-side vision model (Mistral Small 3.1 via Workers AI) before the reply is generated.
 - **Files:** PDFs and text-based documents have their text extracted server-side and included in the prompt. Max 6 MB per file, up to 4 attachments per message.
+- **AI images:** in Chat, type `/image <description>` to generate a picture, `/gif <description>` for a short animated GIF, or attach a photo and use `/edit <change>` to modify it while keeping the original subject. Images are saved in your account and appear in history.
 - **No keys for users:** the free upstream is used when available, with an automatic fallback to Cloudflare Workers AI. No API keys are ever shipped in the browser.
 
 The AI is white-labeled as **NEXUS** / **NEXUS Core** in both the app and the server system prompt.
