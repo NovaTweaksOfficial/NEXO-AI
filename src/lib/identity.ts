@@ -1,5 +1,3 @@
-export const OWNER_EMAIL = 'caydenbonebrake@yahoo.com'
-
 // NEXUS brand-level identity. This is prepended to every system prompt so the
 // assistant consistently presents itself as NEXUS and never reveals underlying
 // infrastructure or third-party engine names.

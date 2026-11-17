@@ -78,7 +78,7 @@ export interface AppSettings {
   fastReplies: boolean
 }
 
-export type TabId = 'home' | 'chat' | 'toolbox' | 'history' | 'settings' | 'owner'
+export type TabId = 'home' | 'chat' | 'toolbox' | 'history' | 'settings'
 
 export interface ToolDef {
   id: string

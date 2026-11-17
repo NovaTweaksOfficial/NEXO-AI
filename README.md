@@ -41,12 +41,15 @@ The AI is white-labeled as **NEXUS** / **NEXUS Core** in both the app and the se
 
 See `backend/README.md`. Live URL: `https://nexus-ai-backend.nexus-ai-backend.workers.dev`.
 
-## FL3SH Console (owner only)
+## FL3SH Console (private, owner only)
 
-When the owner account is signed in, a **Console** tab appears with:
-- An **AI alerts** inbox — when NEXUS blocks a request (for example an explicit-image request), it creates a hold and an alert. Accepting keeps the restriction; declining releases it.
-- **Soft ban**, **ban**, **IP ban**, and **timeout**, each requiring a reason. Bans are enforced server-side across all devices and guests.
-- Active restriction list with revoke, and an account list for quick targeting.
+The moderation console is **not part of the NEXUS AI app**. It is a separate private app:
+
+- **Web:** `https://nexus-ai-backend.nexus-ai-backend.workers.dev/console` — the Worker serves the console only to a signed-in owner session; everyone else gets a login card and nothing else.
+- **Desktop:** a standalone **FL3SH Console** app that opens that private URL. Installers are **not published** on Releases; they stay in `~/FL3SH Private Builds`.
+- Source lives in the private `NovaTweaksOfficial/FL3SH-Console` repository.
+
+It has an AI alert inbox (accept keeps a restriction, decline releases it), soft ban, ban, IP ban, timeout, required reasons, server-side enforcement checks, revoke, and an account list.
 
 ## Desktop apps (macOS + Windows)
 

@@ -8,6 +8,7 @@ import {
 } from './providers'
 import { GIFEncoder, quantize, applyPalette } from 'gifenc'
 import jpeg from 'jpeg-js'
+import { CONSOLE_HTML, CONSOLE_LOGIN_HTML } from './consoleHtml'
 
 export interface Env {
   DB: D1Database
@@ -267,9 +268,28 @@ async function activeModeration(
   return null
 }
 
+function ownerCookie(req: Request): string {
+  const header = req.headers.get('Cookie') || ''
+  const match = header.match(/(?:^|;\s*)nexus_owner_session=([^;]+)/)
+  if (!match) return ''
+  try { return decodeURIComponent(match[1]) } catch { return match[1] }
+}
+
+const OWNER_COOKIE_ATTRS = 'Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=Strict'
+
+// Accepts either the normal Bearer token or the private console cookie. Both
+// are resolved to a real D1 session, so a forged cookie or chat claim cannot
+// grant owner access.
 async function requireOwner(req: Request, env: Env): Promise<AuthUser | null> {
-  const user = await getUser(req, env)
-  return user && user.email === OWNER_EMAIL ? user : null
+  const bearer = req.headers.get('Authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim()
+  const token = bearer || ownerCookie(req)
+  if (!token) return null
+  const tokenHash = await sha256Hex(token)
+  const row: any = await env.DB.prepare(
+    'SELECT s.user_id, s.expires_at, u.email FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?',
+  ).bind(tokenHash).first()
+  if (!row || Number(row.expires_at) < Date.now()) return null
+  return row.email === OWNER_EMAIL ? { id: row.user_id, email: row.email } : null
 }
 
 async function createModeration(env: Env, input: {
@@ -322,23 +342,61 @@ async function aiSafetyResponse(
   if (user?.email === OWNER_EMAIL) return null
   const flag = safetyFlag(prompt)
   if (!flag) return null
-
-  const ip = clientIp(req)
-  const hash = await ipHash(ip)
-  const since = Date.now() - 3_600_000
-  const existing: any = user
-    ? await env.DB.prepare(
-      "SELECT id FROM moderation WHERE target_user_id = ? AND created_by = 'NEXUS Safety' " +
-      "AND status = 'pending' AND created_at > ? LIMIT 1",
-    ).bind(user.id, since).first()
-    : await env.DB.prepare(
-      "SELECT id FROM moderation WHERE ip_hash = ? AND created_by = 'NEXUS Safety' " +
-      "AND status = 'pending' AND created_at > ? LIMIT 1",
-    ).bind(hash, since).first()
-  if (existing) {
+  if (await pendingSafetyHold(env, user, req)) {
     return json({ error: 'That request is blocked and is already awaiting the owner’s decision.' }, 403, cors)
   }
+  await createSafetyHold(env, req, user, flag, prompt)
+  return json({
+    error: 'That request was blocked and sent to the owner for review. Your access is restricted until they accept or decline.',
+    moderation: { type: 'timeout', reason: `NEXUS Safety: ${flag}`, by: 'NEXUS Safety' },
+  }, 403, cors)
+}
 
+// AI safety check. Broad enough to catch the way people actually ask
+// ("adult images", "inappropriate pics", "make her naked") instead of only
+// literal keywords. Anything flagged creates a hold plus an owner alert.
+function safetyFlag(prompt: string): string | null {
+  const text = prompt.toLowerCase().replace(/[_*~`.,!?]+/g, ' ')
+  const adultWord =
+    /\b(18\+|nsfw|porn\w*|xxx|hentai|erotic\w*|sex\w*|explicit|smut|lewd|horny|fetish\w*|orgasm\w*|orgy|nude|naked|topless|undress\w*|lingerie|seductive|suggestive|provocative|naughty|sexy|boobs|tits|genital\w*|masturbat\w*)\b/
+  const adultNearMedia =
+    /\badult\b.{0,50}\b(image|images|photo|photos|picture|pictures|pic|pics|art|drawing|draw|render|generate|make|create|video|content|story|write)\b|\b(image|images|photo|photos|picture|pictures|pic|pics|art|drawing|generate|make|create|video|content|story|write)\b.{0,50}\badult\b/
+  if (adultWord.test(text) || adultNearMedia.test(text)) {
+    return 'Explicit or adult content requested'
+  }
+  if (/\b(kill|hurt|attack|dox|harm|assault|poison|kidnap|abuse|threaten|stalk)\b.{0,60}\b(him|her|them|someone|somebody|person|people|user|guy|girl|woman|man|kid|child)\b/.test(text)) {
+    return 'Targeted harm or harassment requested'
+  }
+  if (/\b(bomb|explosive|weapon|malware|ransomware|poison)\b.{0,50}\b(make|build|create|how to|recipe)\b|\b(how to|recipe for)\b.{0,40}\b(bomb|explosive|weapon|poison)\b/.test(text)) {
+    return 'Dangerous instructions requested'
+  }
+  return null
+}
+
+// Safety net: when NEXUS itself refuses a request, the owner still gets an
+// alert even if the wording didn't match a keyword pattern.
+function refusalFlag(reply: string): string | null {
+  const t = reply.toLowerCase()
+  // NEXUS usually refuses in plain language ("I can't assist with that")
+  // without repeating the banned topic, so treat any clear refusal as a
+  // reportable event rather than requiring a keyword in the reply.
+  if (/\b(can't|cannot|won't|unable to|not able to)\b.{0,80}\b(help|assist|do that|create|make|generate|provide|write|support)\b/.test(t)) {
+    return 'NEXUS refused a disallowed request'
+  }
+  if (/\b(refuse|refused|refusing|not going to help|can't help with that|won't help with that)\b/.test(t)) {
+    return 'NEXUS refused a disallowed request'
+  }
+  return null
+}
+
+async function createSafetyHold(
+  env: Env,
+  req: Request,
+  user: AuthUser | null,
+  flag: string,
+  prompt: string,
+): Promise<void> {
+  const ip = clientIp(req)
   const moderation = await createModeration(env, {
     userId: user?.id || null,
     email: user?.email || null,
@@ -356,22 +414,34 @@ async function aiSafetyResponse(
     `NEXUS blocked a request from ${user?.email || `a guest (${maskIp(ip)})`}. ` +
     `Reason: ${flag}. Prompt: ${prompt.slice(0, 200)}`,
   )
-  return json({
-    error: 'That request was blocked and sent to the owner for review. Your access is restricted until they accept or decline.',
-    moderation: { type: 'timeout', reason: `NEXUS Safety: ${flag}`, by: 'NEXUS Safety' },
-  }, 403, cors)
 }
 
-// AI safety check. Flags clearly explicit requests so the owner can decide.
-function safetyFlag(prompt: string): string | null {
-  const text = prompt.toLowerCase()
-  if (/18\+|nsfw|\bporn|\bxxx|\bhentai|\berotic|\bnude|\bnaked|\bsexual|\bexplicit\b/.test(text)) {
-    return 'Explicit or adult content requested'
-  }
-  if (/\b(kill|hurt|attack|dox|x)\b.{0,40}\b(him|her|them|someone|person|people)\b/i.test(text)) {
-    return 'Targeted harm or harassment requested'
-  }
-  return null
+async function pendingSafetyHold(env: Env, user: AuthUser | null, req: Request): Promise<boolean> {
+  const since = Date.now() - 3_600_000
+  const row: any = user
+    ? await env.DB.prepare(
+      "SELECT id FROM moderation WHERE target_user_id = ? AND created_by = 'NEXUS Safety' " +
+      "AND status = 'pending' AND created_at > ? LIMIT 1",
+    ).bind(user.id, since).first()
+    : await env.DB.prepare(
+      "SELECT id FROM moderation WHERE ip_hash = ? AND created_by = 'NEXUS Safety' " +
+      "AND status = 'pending' AND created_at > ? LIMIT 1",
+    ).bind(await ipHash(clientIp(req)), since).first()
+  return !!row
+}
+
+// Called after a reply is generated. Catches refusals the keyword pass missed.
+async function alertOnRefusal(
+  env: Env,
+  req: Request,
+  user: AuthUser | null,
+  prompt: string,
+  reply: string,
+): Promise<void> {
+  if (user?.email === OWNER_EMAIL) return
+  const flag = refusalFlag(reply)
+  if (!flag || await pendingSafetyHold(env, user, req)) return
+  await createSafetyHold(env, req, user, flag, prompt)
 }
 
 // -------------------------------------------------------------------- vision
@@ -713,6 +783,25 @@ export default {
       return json({ ok: true, service: 'nexus-ai-backend', accounts: true }, 200, cors)
     }
 
+    // Private FL3SH Console. Unauthorized visitors only get the login card —
+    // the console bundle itself never leaves the Worker for them.
+    if (path === '/console' || path === '/console/') {
+      const owner = req.method === 'GET' ? await requireOwner(req, env) : null
+      const html = owner ? CONSOLE_HTML : CONSOLE_LOGIN_HTML
+      return new Response(html, {
+        status: owner ? 200 : 401,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store, private',
+          'X-Frame-Options': 'DENY',
+          'Referrer-Policy': 'no-referrer',
+          'Content-Security-Policy':
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
+            "connect-src 'self'; img-src 'self' data:; font-src 'self' data:; media-src 'self' data:; object-src 'none'",
+        },
+      })
+    }
+
     if (path === '/api/usage' && req.method === 'GET') {
       const day = utcDay()
       const row: any = await env.DB.prepare(
@@ -797,6 +886,43 @@ export default {
         if (attempt !== row.password_hash) return json({ error: 'Incorrect email or password.' }, 401, cors)
         const token = await createSession(env, row.id)
         return json({ token, user: { id: row.id, email: row.email } }, 200, cors)
+      }
+
+      if (path === '/api/owner/cookie-login' && req.method === 'POST') {
+        const body = await parseBody(req)
+        const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : ''
+        const password = typeof body?.password === 'string' ? body.password : ''
+        if (email !== OWNER_EMAIL) return json({ error: 'Not authorized.' }, 403, cors)
+        const row: any = await env.DB.prepare(
+          'SELECT id, email, password_hash, salt FROM users WHERE email = ?',
+        ).bind(email).first()
+        if (!row || await hashPassword(password, row.salt) !== row.password_hash) {
+          return json({ error: 'Incorrect email or password.' }, 401, cors)
+        }
+        const token = await createSession(env, row.id)
+        return new Response(JSON.stringify({ ok: true, email: row.email }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Set-Cookie': `nexus_owner_session=${encodeURIComponent(token)}; ${OWNER_COOKIE_ATTRS}`,
+            ...cors,
+          },
+        })
+      }
+
+      if (path === '/api/owner/cookie-logout' && req.method === 'POST') {
+        const token = ownerCookie(req)
+        if (token) {
+          await env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(await sha256Hex(token)).run()
+        }
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Set-Cookie': `nexus_owner_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict`,
+            ...cors,
+          },
+        })
       }
 
       if (path === '/api/auth/logout' && req.method === 'POST') {
@@ -1017,6 +1143,28 @@ export default {
         }, 200, cors)
       }
 
+      if (path === '/api/owner/check' && req.method === 'GET') {
+        const owner = await requireOwner(req, env)
+        if (!owner) return json({ error: 'Owner access required.' }, 403, cors)
+        const target = (url.searchParams.get('target') || '').trim()
+        if (!target) return json({ error: 'Enter a user or IP to check.' }, 400, cors)
+        const now = Date.now()
+        let row: any = null
+        if (target.includes('@')) {
+          row = await env.DB.prepare(
+            "SELECT * FROM moderation WHERE type IN ('ban','timeout','soft_ban') " +
+            "AND status IN ('active','pending') AND target_email = ? " +
+            'AND (expires_at IS NULL OR expires_at > ?) ORDER BY created_at DESC LIMIT 1',
+          ).bind(target.toLowerCase(), now).first()
+        } else if (/^\d{1,3}(\.\d{1,3}){3}$/.test(target)) {
+          row = await env.DB.prepare(
+            "SELECT * FROM moderation WHERE type = 'ip_ban' AND status IN ('active','pending') " +
+            'AND ip_hash = ? AND (expires_at IS NULL OR expires_at > ?) ORDER BY created_at DESC LIMIT 1',
+          ).bind(await ipHash(target), now).first()
+        }
+        return json({ target, enforced: !!row, moderation: row || null }, 200, cors)
+      }
+
       if (path === '/api/owner/moderate' && req.method === 'POST') {
         const owner = await requireOwner(req, env)
         if (!owner) return json({ error: 'Owner access required.' }, 403, cors)
@@ -1048,7 +1196,19 @@ export default {
         const moderation = await createModeration(env, {
           userId, email, ip, type, reason, by: owner.email, expiresAt,
         })
-        return json({ moderation }, 200, cors)
+        // Read back from D1 so the console can prove the restriction is live.
+        const live: any = email
+          ? await env.DB.prepare(
+            "SELECT id, type, status, expires_at FROM moderation WHERE target_email = ? " +
+            "AND status IN ('active','pending') AND (expires_at IS NULL OR expires_at > ?) " +
+            'ORDER BY created_at DESC LIMIT 1',
+          ).bind(email, Date.now()).first()
+          : await env.DB.prepare(
+            "SELECT id, type, status, expires_at FROM moderation WHERE ip_hash = ? " +
+            "AND status IN ('active','pending') AND (expires_at IS NULL OR expires_at > ?) " +
+            'ORDER BY created_at DESC LIMIT 1',
+          ).bind(await ipHash(ip || ''), Date.now()).first()
+        return json({ moderation, enforced: !!live, live }, 200, cors)
       }
 
       const alertDecision = path.match(/^\/api\/owner\/alerts\/([a-f0-9]+)\/decision$/)
@@ -1223,10 +1383,12 @@ export default {
             if (stream && outcome.stream) {
               return relayWorkersAI(outcome.stream, cors, async full => {
                 await recordUsage(env, 1, 0, textReplyNeurons(chatMessages, full))
+                await alertOnRefusal(env, req, currentUser, lastUserText, full)
               })
             }
             const text = outcome.text || ''
             await recordUsage(env, 1, 0, textReplyNeurons(chatMessages, text))
+            await alertOnRefusal(env, req, currentUser, lastUserText, text)
             return json({ text }, 200, cors)
           } catch {
             return json({ error: 'NEXUS is temporarily unavailable. Please try again in a moment.' }, 503, cors)
@@ -1236,6 +1398,7 @@ export default {
         if (!stream) {
           const data: any = await res.json()
           const text = data?.choices?.[0]?.message?.content ?? ''
+          await alertOnRefusal(env, req, currentUser, lastUserText, text)
           return json({ text }, 200, cors)
         }
 
@@ -1246,6 +1409,7 @@ export default {
           const reader = res.body!.getReader()
           const dec = new TextDecoder()
           let buf = ''
+          let full = ''
           try {
             while (true) {
               const { done, value } = await reader.read()
@@ -1261,7 +1425,10 @@ export default {
                 try {
                   const j = JSON.parse(data)
                   const delta = j?.choices?.[0]?.delta?.content
-                  if (delta) await writer.write(enc.encode(`data: ${JSON.stringify({ delta })}\n\n`))
+                  if (delta) {
+                    full += delta
+                    await writer.write(enc.encode(`data: ${JSON.stringify({ delta })}\n\n`))
+                  }
                 } catch { /* ignore */ }
               }
             }
@@ -1269,6 +1436,7 @@ export default {
           } catch (e: any) {
             await writer.write(enc.encode(`data: ${JSON.stringify({ error: e?.message || 'stream error' })}\n\n`))
           } finally {
+            try { await alertOnRefusal(env, req, currentUser, lastUserText, full) } catch { /* ignore */ }
             await writer.close()
           }
         })()

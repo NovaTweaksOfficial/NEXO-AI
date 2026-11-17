@@ -11,3 +11,7 @@ backend/.dev.vars
 
 *.dmg
 *.exe
+console-desktop/node_modules
+console-desktop/release/
+console/
+console-desktop/
