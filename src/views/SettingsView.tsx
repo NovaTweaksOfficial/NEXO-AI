@@ -39,7 +39,7 @@ export function SettingsView() {
   const { settings, update, selectedConfig } = useSettings()
   const { clearAll, resetLocal, syncedCount, syncing } = useChat()
   const { status, user, token, signout, openAuth } = useAuth()
-  const { state: progress, level, synced: progressSynced, reset } = useProgress()
+  const { state: progress, level, synced: progressSynced, syncNow: syncProgress, reset } = useProgress()
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [testing, setTesting] = useState(false)
   const [usage, setUsage] = useState<UsageInfo | null>(null)
@@ -382,11 +382,18 @@ export function SettingsView() {
             : 'Guests keep XP, streaks, badges, quests, and stickers on this device only. Sign in to sync them across devices.'}
         </div>
         {status === 'signedIn' && (
-          <div className="row" style={{ gap: 6, margin: '0 0 12px' }}>
+          <div className="row" style={{ gap: 8, margin: '0 0 12px' }}>
             <Cloud size={13} style={{ color: progressSynced ? 'var(--success)' : 'var(--text-3)' }} />
             <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
               {progressSynced ? 'Account sync active' : 'Syncing with your account…'}
             </span>
+            <button
+              className="btn ghost"
+              style={{ marginLeft: 'auto', padding: '4px 9px', fontSize: 10.5 }}
+              onClick={() => { playTap(); void syncProgress() }}
+            >
+              <RefreshCw size={12} /> Sync now
+            </button>
           </div>
         )}
         <div className="home-stats" style={{ marginBottom: 12 }}>

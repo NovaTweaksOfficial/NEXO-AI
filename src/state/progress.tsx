@@ -64,6 +64,8 @@ interface Ctx {
   celebrations: Celebration[]
   /** True when signed-in progress has been reconciled with the server. */
   synced: boolean
+  /** Force a re-pull of account progress from the server. */
+  syncNow: () => Promise<void>
   dismiss: (id: string) => void
   award: (eventId: string, xp: number, opts?: AwardOptions) => void
   claimDaily: () => void
@@ -171,46 +173,60 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
   tokenRef.current = token
   backendRef.current = settings.backendUrl
 
+  const adopt = useCallback((next: ProgressState) => {
+    stateRef.current = next
+    awardedRef.current = new Set(Object.keys(next.events))
+    setCelebrations([])
+    setState(next)
+  }, [])
+
   // Progress is scoped per identity, exactly like conversations. Switching
   // accounts never mixes XP, streaks, badges, or message stickers. Signed-in
   // progress is reconciled with the account copy on D1 so it follows the user
   // to every device; guests keep their copy in localStorage only.
+  //
+  // The local switch and the remote fetch are separate effects on purpose.
+  // Setting loadedKey in the same effect that started the fetch would re-run
+  // that effect and cancel its own request, so the account copy was ignored.
   useEffect(() => {
     if (!key || loadedKey === key) return
     setLoadedKey(key)
     setSynced(false)
-    const local = normalize(load<Partial<ProgressState>>(key, freshState()))
+    adopt(normalize(load<Partial<ProgressState>>(key, freshState())))
+  }, [key, loadedKey, adopt])
 
-    const adopt = (next: ProgressState) => {
-      stateRef.current = next
-      awardedRef.current = new Set(Object.keys(next.events))
-      setCelebrations([])
-      setState(next)
-    }
-
-    if (!isAccount || !tokenRef.current) {
-      adopt(local)
+  useEffect(() => {
+    if (!key || loadedKey !== key) return
+    if (!isAccount || !token) {
       setSynced(true)
       return
     }
-
     let cancelled = false
-    void fetchProgress(backendRef.current, tokenRef.current)
+    const currentToken = token
+    void fetchProgress(backendRef.current, currentToken)
       .then(({ progress }) => {
         if (cancelled) return
         const remote = progress ? normalize(progress as Partial<ProgressState>) : null
-        adopt(remote ? mergeStates(local, remote) : local)
+        adopt(remote ? mergeStates(stateRef.current, remote) : stateRef.current)
         setSynced(true)
       })
       .catch(() => {
         // Offline or server error: stay usable with the local copy. The next
         // mutation will retry the push once the account is reachable again.
         if (cancelled) return
-        adopt(local)
         setSynced(true)
       })
     return () => { cancelled = true }
-  }, [key, loadedKey, isAccount])
+  }, [key, loadedKey, isAccount, token, adopt])
+
+  const syncNow = useCallback(async () => {
+    if (!isAccount || !tokenRef.current) return
+    try {
+      const { progress } = await fetchProgress(backendRef.current, tokenRef.current)
+      if (progress) adopt(mergeStates(stateRef.current, normalize(progress as Partial<ProgressState>)))
+      setSynced(true)
+    } catch { /* keep the local copy when offline */ }
+  }, [adopt, isAccount])
 
   useEffect(() => {
     if (!key || loadedKey !== key) return
@@ -413,13 +429,14 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
     level,
     celebrations,
     synced,
+    syncNow,
     dismiss,
     award,
     claimDaily,
     toggleReaction,
     recordArcade,
     reset,
-  }), [state, level, celebrations, synced, dismiss, award, claimDaily, toggleReaction, recordArcade, reset])
+  }), [state, level, celebrations, synced, syncNow, dismiss, award, claimDaily, toggleReaction, recordArcade, reset])
 
   return <ProgressCtx.Provider value={value}>{children}</ProgressCtx.Provider>
 }
