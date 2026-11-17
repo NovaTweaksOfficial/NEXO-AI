@@ -10,6 +10,40 @@ import { Play, Copy, Check } from 'lucide-react'
 import type { ToolDef } from '@/types'
 
 const TOOLS: ToolDef[] = [
+  {
+    id: 'gorilla-tag-mods',
+    name: 'Gorilla Tag Mods',
+    description: 'Build BepInEx / IL2CPP mods for Gorilla Tag with C# and Unity.',
+    icon: '🐒',
+    systemPrompt:
+      'You are a Gorilla Tag modding mentor. Help the user make real, working mods step by step. ' +
+      'Assume BepInEx 5.x with Il2CppInterop for an IL2CPP Unity build, C# plugins, HarmonyLib patches, and Unity 2021 LTS conventions. ' +
+      'Give a short plan first, then concrete files: plugin class with [BepInPlugin], patch classes, folder layout (BepInEx/plugins, BepInEx/patchers), and a build/test checklist. ' +
+      'When a step needs commands, show real shell commands (for example dotnet build) in a bash code block, and show real grep commands for searching game logs (for example grep -i "error" BepInEx/LogOutput.log). ' +
+      'Recommend testing offline or in a private lobby, keeping backups of game files, and checking the game’s current rules before using any mod online. ' +
+      'Never help with malware, account theft, payment bypass, network abuse, or mods designed to harm or harass other players. ' +
+      'Use markdown code blocks with language tags and explain each patch in plain language.',
+    inputLabel: 'What mod are you making?',
+    inputPlaceholder: 'e.g. a plugin that changes my player color, or a patch that logs room joins…',
+    outputLabel: 'Mod plan & code',
+  },
+  {
+    id: 'mods-general',
+    name: 'MODS (General)',
+    description: 'Game and app modding help: Unity, C#, BepInEx, reverse engineering.',
+    icon: '🛠️',
+    systemPrompt:
+      'You are a general modding mentor. Help users make mods for games and apps: locating the right framework (BepInEx, MelonLoader, Fabric/Forge, x64dbg-style analysis), ' +
+      'setting up a decompiler, reading managed or IL2CPP code, writing C#/C++ patches, hooking functions safely, and packaging a clean release. ' +
+      'Start with a short plan, then give exact files, folder layout, and a build-and-test checklist. Include real shell commands in bash code blocks when a build or install step is needed, ' +
+      'and real grep commands when searching logs or decompiled output. ' +
+      'Stress backups, running modified builds offline first, version matching between mod and game, and respecting the software’s license and online rules. ' +
+      'Never help with malware, stolen credentials, payment bypass, cheating that targets other players, or network abuse. ' +
+      'Use markdown code blocks with language tags.',
+    inputLabel: 'What are you modding?',
+    inputPlaceholder: 'Game/app name, version, engine, and what you want to change…',
+    outputLabel: 'Mod plan & code',
+  },
   { id: 'writer', name: 'AI Writing Assistant', description: 'Draft essays, articles, and content.', icon: '✍️', systemPrompt: 'You are a skilled writing assistant. Produce polished, well-structured writing based on the user request.', inputLabel: 'What should I write?', inputPlaceholder: 'Describe what you want written…', outputLabel: 'Result' },
   { id: 'summarizer', name: 'Text Summarizer', description: 'Summarize long text into key points.', icon: '📄', systemPrompt: 'Summarize the provided text concisely with key bullet points.', inputLabel: 'Text to summarize', inputPlaceholder: 'Paste text here…', outputLabel: 'Summary' },
   { id: 'code', name: 'Code Assistant', description: 'Generate or explain code.', icon: '💻', systemPrompt: 'You are a coding assistant. Generate, explain, or debug code. Use markdown code blocks.', inputLabel: 'Your coding request', inputPlaceholder: 'Describe the code you need…', outputLabel: 'Code' },
@@ -52,6 +86,12 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
   const [input, setInput] = useState('')
   const [output, setOutput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [activities, setActivities] = useState<string[]>([])
+  const pushActivity = (label: string) => {
+    const clean = label.trim()
+    if (!clean) return
+    setActivities(prev => (prev[prev.length - 1] === clean ? prev : [...prev, clean].slice(-4)))
+  }
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -60,6 +100,8 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
     if (!cfg) { playError(); setError('No AI provider configured. Go to Settings.'); return }
     playSend()
     setLoading(true); setError(null); setOutput('')
+    setActivities([])
+    pushActivity(tool.id === 'gorilla-tag-mods' || tool.id === 'mods-general' ? 'coding' : 'read')
     const adapter = getAdapter(cfg.provider)
     const runtimeCfg = {
       provider: cfg.provider,
@@ -77,6 +119,7 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
         settings: settings.generation,
         systemPrompt: `${NEXUS_IDENTITY} ${tool.systemPrompt}`,
         onChunk: (full) => setOutput(full),
+        onActivity: pushActivity,
       })
       if (!output) setOutput(text)
     } catch (e: any) {
@@ -102,8 +145,17 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
         <label style={{ fontSize: 13, color: 'var(--text-2)' }}>{tool.inputLabel}</label>
         <textarea className="textarea" value={input} onChange={e => setInput(e.target.value)} placeholder={tool.inputPlaceholder} />
         <button className="btn primary" onClick={run} disabled={loading} style={{ alignSelf: 'flex-start' }}>
-          <Play size={14} /> {loading ? 'Running…' : 'Run'}
+          <Play size={14} /> {loading ? (activities[activities.length - 1] || 'running') : 'Run'}
         </button>
+        {loading && (
+          <div className="activity-stream" role="status" aria-live="polite">
+            <span className="activity-spinner" aria-hidden="true" />
+            <span className="activity-label">{activities[activities.length - 1] || 'working'}</span>
+            {activities.length > 1 && (
+              <span className="activity-trail">{activities.slice(0, -1).join(' → ')}</span>
+            )}
+          </div>
+        )}
         {error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
         {output && (
           <div className="glass" style={{ padding: 14 }}>

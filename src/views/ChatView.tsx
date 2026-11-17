@@ -94,6 +94,13 @@ export function ChatView() {
   const { refresh: refreshModeration } = useModeration()
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
+  // Honest step labels reported by the backend (and by local image work).
+  const [activities, setActivities] = useState<string[]>([])
+  const pushActivity = (label: string) => {
+    const clean = label.trim()
+    if (!clean) return
+    setActivities(prev => (prev[prev.length - 1] === clean ? prev : [...prev, clean].slice(-4)))
+  }
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState<Attachment[]>([])
   const [preparing, setPreparing] = useState(false)
@@ -195,6 +202,10 @@ export function ChatView() {
     setError(null)
     setInput('')
     setPending([])
+    setActivities([])
+    if (attachments.length) {
+      pushActivity(attachments.some(a => a.kind === 'image') ? 'read image' : 'read file')
+    }
     // Uploaded images already live on the server; dropping the inline copy
     // keeps synced conversations small. Guests keep the inline data URL.
     const cleanAttachments = attachments.map(a =>
@@ -229,6 +240,7 @@ export function ChatView() {
         updateMessage(activeConv.id, assistantMsg.id, 'Attach a photo first, then try /edit again.')
         return
       }
+      pushActivity(kind === 'image' ? 'generate' : 'edit')
       setStreaming(true)
       try {
         const result = await createImage(settings.backendUrl, token, {
@@ -301,6 +313,7 @@ export function ChatView() {
     }
     const imageAttachments = cleanAttachments.filter(a => a.kind === 'image')
 
+    pushActivity(mode === 'coding' ? 'coding' : 'write')
     setStreaming(true)
     const ac = new AbortController()
     abortRef.current = ac
@@ -315,6 +328,7 @@ export function ChatView() {
         attachments: imageAttachments,
         fast: settings.fastReplies,
         onChunk: (full) => updateMessage(activeConv.id, assistantMsg.id, full),
+        onActivity: pushActivity,
       })
     } catch (e: any) {
       if (e?.status === 403) {
@@ -417,7 +431,7 @@ export function ChatView() {
               {m.role === 'assistant' ? (
                 <div className="markdown">
                   <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-                    {m.content || (streaming ? '...' : '')}
+                    {m.content || ''}
                   </ReactMarkdown>
                 </div>
               ) : (
@@ -437,8 +451,12 @@ export function ChatView() {
           </div>
         ))}
         {streaming && (
-          <div style={{ display: 'flex', gap: 4, padding: 8 }}>
-            <span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" />
+          <div className="activity-stream" role="status" aria-live="polite">
+            <span className="activity-spinner" aria-hidden="true" />
+            <span className="activity-label">{activities[activities.length - 1] || 'working'}</span>
+            {activities.length > 1 && (
+              <span className="activity-trail">{activities.slice(0, -1).join(' → ')}</span>
+            )}
           </div>
         )}
         {error && <div style={{ color: 'var(--danger)', fontSize: 13, padding: 8 }}>{error}</div>}

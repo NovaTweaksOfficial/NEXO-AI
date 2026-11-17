@@ -29,6 +29,8 @@ export interface ChatOptions {
   systemPrompt?: string
   signal?: AbortSignal
   onChunk?: (text: string) => void
+  /** Honest step labels emitted by the backend while it works. */
+  onActivity?: (label: string) => void
   attachments?: Attachment[]
   /** Skip the throttled free-engine check and use the direct fallback engine. */
   fast?: boolean

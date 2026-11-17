@@ -133,14 +133,19 @@ async function callAnthropicBackend(cfg: RuntimeConfig, opts: ChatOptions): Prom
       if (!t || !t.startsWith('data:')) continue
       const data = t.slice(5).trim()
       if (data === '[DONE]') continue
-      try {
-        const json = JSON.parse(data)
-        if (json.error) throw new Error(json.error)
-        if (typeof json.delta === 'string') { full += json.delta; opts.onChunk?.(full) }
-        if (json.text) { full = json.text; opts.onChunk?.(full) }
-      } catch (e) {
-        if (e instanceof Error && e.message && !e.message.includes('JSON')) throw e
+      let json: any
+      try { json = JSON.parse(data) } catch { continue }
+      if (typeof json?.activity === 'string') {
+        opts.onActivity?.(json.activity)
+        continue
       }
+      if (json?.moderation || json?.error) {
+        const err: any = new Error(String(json.error || 'Request failed.'))
+        if (json.moderation) { err.status = 403; err.moderation = json.moderation }
+        throw err
+      }
+      if (typeof json.delta === 'string') { full += json.delta; opts.onChunk?.(full) }
+      if (json.text) { full = json.text; opts.onChunk?.(full) }
     }
   }
   return full
