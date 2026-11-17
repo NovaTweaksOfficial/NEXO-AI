@@ -8,7 +8,9 @@ import App from './App'
 import './styles/app.css'
 import 'highlight.js/styles/github-dark.css'
 
-if ('serviceWorker' in navigator) {
+// The desktop app loads from file:// where service workers cannot work; the
+// PWA's offline handler would otherwise replace the page with an error.
+if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(() => { /* ignore */ })
   })

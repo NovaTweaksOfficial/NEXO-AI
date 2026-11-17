@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, Menu } = require('electron')
+const { app, BrowserWindow, shell, Menu, session } = require('electron')
 const path = require('path')
 
 const isMac = process.platform === 'darwin'
@@ -44,7 +44,14 @@ function createWindow() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(async () => {
+  // Remove any service worker left behind by an earlier build. On file://
+  // origins its offline handler would show an error instead of the app.
+  try {
+    await session.defaultSession.clearStorageData({ storages: ['serviceworkers'] })
+  } catch { /* harmless on a fresh profile */ }
+  createWindow()
+})
 
 app.on('window-all-closed', () => {
   if (!isMac) app.quit()
