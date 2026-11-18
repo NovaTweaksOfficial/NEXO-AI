@@ -67,6 +67,7 @@ export default function App() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        if (status !== 'signedIn' && status !== 'guest') return
         event.preventDefault()
         setPaletteOpen(open => !open)
       } else if (event.key === 'Escape') {
@@ -76,7 +77,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [setPaletteOpen, setArcadeOpen])
+  }, [setPaletteOpen, setArcadeOpen, status])
 
   // Flush pending conversation changes when the app is backgrounded.
   useEffect(() => {

@@ -14,6 +14,7 @@ interface Ctx {
   addMessage: (convId: string, msg: ChatMessage) => void
   addAttachment: (convId: string, msgId: string, attachment: import('@/types').Attachment) => void
   updateMessage: (convId: string, msgId: string, content: string) => void
+  setMessageMeta: (convId: string, msgId: string, patch: Partial<ChatMessage>) => void
   removeMessage: (convId: string, msgId: string) => void
   rename: (id: string, title: string) => void
   remove: (id: string) => void
@@ -217,6 +218,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       : c))
   }, [])
 
+  // Sources and other metadata travel with the message so they survive reloads
+  // and account sync instead of disappearing when the stream ends.
+  const setMessageMeta = useCallback((convId: string, msgId: string, patch: Partial<ChatMessage>) => {
+    setConversations(prev => prev.map(c => c.id === convId
+      ? {
+          ...c,
+          messages: c.messages.map(m => m.id === msgId ? { ...m, ...patch } : m),
+          updatedAt: Date.now(),
+        }
+      : c))
+  }, [])
+
   const removeMessage = useCallback((convId: string, msgId: string) => {
     setConversations(prev => prev.map(c => c.id === convId
       ? { ...c, messages: c.messages.filter(m => m.id !== msgId), updatedAt: Date.now() }
@@ -278,7 +291,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const current = conversations.find(c => c.id === currentId) ?? null
 
   return (
-    <ChatCtx.Provider value={{ conversations, currentId, current, newConversation, select, addMessage, addAttachment, updateMessage, removeMessage, rename, remove, search, clearAll, syncNow, syncing, syncedCount, resetLocal }}>
+    <ChatCtx.Provider value={{ conversations, currentId, current, newConversation, select, addMessage, addAttachment, updateMessage, setMessageMeta, removeMessage, rename, remove, search, clearAll, syncNow, syncing, syncedCount, resetLocal }}>
       {children}
     </ChatCtx.Provider>
   )

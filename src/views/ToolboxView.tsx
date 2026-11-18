@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSettings } from '@/state/settings'
 import { useUi } from '@/state/ui'
 import { useProgress } from '@/state/progress'
@@ -8,8 +8,27 @@ import { getAdapter } from '@/lib/providers'
 import { NEXUS_IDENTITY } from '@/lib/identity'
 import { uid } from '@/lib/storage'
 import { playTap, playSend, playReceive, playError } from '@/lib/sounds'
-import { Play, Copy, Check } from 'lucide-react'
+import { Play, Copy, Check, Square, FileCode2, ChevronDown } from 'lucide-react'
 import type { ToolDef } from '@/types'
+
+interface ArtifactFile { name: string; content: string }
+
+/** Parse the `=== filename.ext ===` format NEXUS uses for complete files. */
+function parseArtifacts(text: string): { intro: string; files: ArtifactFile[] } {
+  const pattern = /(?:^|\n)\s*===\s*([^\n=]+?\.[A-Za-z0-9]+)\s*===\s*\n?([\s\S]*?)(?=\n\s*===\s*[^\n=]+?\.[A-Za-z0-9]+\s*===|$)/g
+  const files: ArtifactFile[] = []
+  let firstIndex = -1
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(text))) {
+    if (firstIndex < 0) firstIndex = match.index
+    files.push({
+      name: match[1].trim().slice(0, 120),
+      content: match[2].replace(/^\n+|\n+$/g, '').slice(0, 100_000),
+    })
+  }
+  if (!files.length) return { intro: text, files: [] }
+  return { intro: text.slice(0, Math.max(0, firstIndex)).trim(), files }
+}
 
 const TOOLS: ToolDef[] = [
   {
@@ -107,6 +126,9 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
   }
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [copiedFile, setCopiedFile] = useState<string | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
+  const lastCommitRef = useRef(0)
 
   const run = async () => {
     if (!input.trim() || loading) return
@@ -114,6 +136,10 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
     playSend()
     const runId = uid()
     let succeeded = false
+    let partial = ''
+    const ac = new AbortController()
+    abortRef.current = ac
+    lastCommitRef.current = 0
     setLoading(true); setError(null); setOutput('')
     setActivities([])
     pushActivity(tool.id === 'gorilla-tag-mods' || tool.id === 'mods-general' ? 'coding' : 'read')
@@ -135,7 +161,15 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
           ? { ...settings.generation, maxTokens: 4096 }
           : settings.generation,
         systemPrompt: `${NEXUS_IDENTITY} ${tool.systemPrompt}`,
-        onChunk: (full) => setOutput(full),
+        signal: ac.signal,
+        onChunk: (full) => {
+          partial = full
+          const now = Date.now()
+          if (now - lastCommitRef.current >= 120) {
+            lastCommitRef.current = now
+            setOutput(full)
+          }
+        },
         onActivity: pushActivity,
       })
       setOutput(text)
@@ -149,17 +183,35 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
       }
     } catch (e: any) {
       if (e?.status === 403) { void refreshModeration(); return }
+      if (e?.name === 'AbortError') {
+        // Keep whatever was already generated when the user pressed Stop.
+        if (partial) setOutput(partial)
+        return
+      }
       playError()
       setError(e?.message || 'Failed.')
     } finally {
       if (succeeded) playReceive()
       setLoading(false)
+      abortRef.current = null
     }
   }
+
+  const stop = () => abortRef.current?.abort()
 
   const copy = async () => {
     try { await navigator.clipboard.writeText(output); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch {}
   }
+
+  const copyFile = async (name: string, content: string) => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopiedFile(name)
+      setTimeout(() => setCopiedFile(null), 1500)
+    } catch { /* clipboard unavailable */ }
+  }
+
+  const artifacts = parseArtifacts(output)
 
   return (
     <div className="page">
@@ -169,9 +221,12 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
       <div className="col">
         <label style={{ fontSize: 13, color: 'var(--text-2)' }}>{tool.inputLabel}</label>
         <textarea className="textarea" value={input} onChange={e => setInput(e.target.value)} placeholder={tool.inputPlaceholder} />
-        <button className="btn primary" onClick={run} disabled={loading} style={{ alignSelf: 'flex-start' }}>
-          <Play size={14} /> {loading ? (activities[activities.length - 1] || 'running') : 'Run'}
-        </button>
+        <div className="row" style={{ alignSelf: 'flex-start', gap: 6 }}>
+          <button className="btn primary" onClick={run} disabled={loading}>
+            <Play size={14} /> Run
+          </button>
+          {loading && <button className="btn danger" onClick={stop}><Square size={13} /> Stop</button>}
+        </div>
         {loading && (
           <div className="activity-stream" role="status" aria-live="polite">
             <span className="activity-spinner" aria-hidden="true" />
@@ -185,10 +240,44 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
         {output && (
           <div className="glass" style={{ padding: 14 }}>
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{tool.outputLabel}</span>
-              <button className="btn ghost" style={{ padding: 4 }} onClick={copy}>{copied ? <Check size={14} /> : <Copy size={14} />}</button>
+              <span style={{ fontSize: 13, color: 'var(--text-2)' }}>
+                {tool.outputLabel}{artifacts.files.length ? ` · ${artifacts.files.length} files` : ''}
+              </span>
+              <button className="btn ghost" style={{ padding: 4 }} onClick={copy} aria-label="Copy all output">
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+              </button>
             </div>
-            <div style={{ whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.5 }}>{output}</div>
+            {artifacts.intro && <pre className="artifact-prose">{artifacts.intro}</pre>}
+            {artifacts.files.length ? (
+              <div className="artifact-list">
+                {artifacts.files.map((file, i) => (
+                  <div key={`${file.name}-${i}`} className="artifact-file">
+                    <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+                      <span className="row" style={{ gap: 6, fontSize: 12, fontWeight: 700 }}>
+                        <FileCode2 size={14} style={{ color: 'var(--purple-2)' }} /> {file.name}
+                      </span>
+                      <button
+                        className="btn ghost"
+                        style={{ padding: 3 }}
+                        onClick={() => copyFile(file.name, file.content)}
+                        aria-label={`Copy ${file.name}`}
+                      >
+                        {copiedFile === file.name ? <Check size={13} /> : <Copy size={13} />}
+                      </button>
+                    </div>
+                    <pre className="artifact-code"><code>{file.content}</code></pre>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <pre className="artifact-prose">{output}</pre>
+            )}
+            {artifacts.files.length > 0 && (
+              <details className="artifact-raw">
+                <summary><ChevronDown size={12} /> Raw response</summary>
+                <pre className="artifact-prose">{output}</pre>
+              </details>
+            )}
           </div>
         )}
       </div>

@@ -18,11 +18,13 @@ import {
   readTextFile,
   uploadFile,
   createImage,
+  generateTitle,
 } from '@/lib/api'
-import type { Attachment, ChatMessage } from '@/types'
+import type { Attachment, ChatMessage, WebSource } from '@/types'
 import {
   Send, Square, RotateCcw, Copy, Check, ChevronDown, MessageCircle, Code2, Sparkles,
   GraduationCap, Search, Camera, ImagePlus, Paperclip, X, FileText, Wand2, Film, Command,
+  ExternalLink,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -90,13 +92,14 @@ function AttachmentImage({ att, token, backend }: { att: Attachment; token: stri
 
 export function ChatView() {
   const { mode, setMode, setPaletteOpen } = useUi()
-  const { current, newConversation, select, addMessage, addAttachment, updateMessage, removeMessage, rename } = useChat()
+  const { current, newConversation, select, addMessage, addAttachment, updateMessage, setMessageMeta, removeMessage, rename } = useChat()
   const { settings, selectedConfig: cfg } = useSettings()
   const { token } = useAuth()
   const { refresh: refreshModeration } = useModeration()
   const { state, level, award, toggleReaction } = useProgress()
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
+  const [streamingId, setStreamingId] = useState<string | null>(null)
   // Honest step labels reported by the backend (and by local image work).
   const [activities, setActivities] = useState<string[]>([])
   const pushActivity = (label: string) => {
@@ -108,6 +111,11 @@ export function ChatView() {
   const [pending, setPending] = useState<Attachment[]>([])
   const [preparing, setPreparing] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
+  // Streaming text is committed in small batches. Updating the whole
+  // conversation on every ~32-character delta made long replies stutter and
+  // hammer localStorage; these refs keep the live text and the last commit.
+  const streamTextRef = useRef('')
+  const lastCommitRef = useRef(0)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [showModeMenu, setShowModeMenu] = useState(false)
@@ -140,6 +148,14 @@ export function ChatView() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [current?.messages, streaming])
+
+  // Grow with the message instead of trapping long drafts in a one-line box.
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(160, el.scrollHeight)}px`
+  }, [input])
 
   const conv = current
   const lastAssistantId = [...(conv?.messages ?? [])].reverse().find(m => m.role === 'assistant' && m.content)?.id
@@ -198,7 +214,11 @@ export function ChatView() {
     }
   }
 
-  const send = async (overrideText?: string, overrideAttachments?: Attachment[]) => {
+  const send = async (
+    overrideText?: string,
+    overrideAttachments?: Attachment[],
+    historyOverride?: ChatMessage[],
+  ) => {
     const attachments = overrideAttachments ?? pending
     const raw = (overrideText ?? input).trim()
     const text = raw || (attachments.length ? 'Describe what is attached.' : '')
@@ -226,6 +246,7 @@ export function ChatView() {
     // chat, tapping "New", or picking a home suggestion must not leave an
     // empty conversation behind.
     const existing = conv
+    const isFirst = !existing || existing.messages.length === 0
     const activeConv = existing ?? newConversation(mode)
     addMessage(activeConv.id, userMsg)
     addMessage(activeConv.id, assistantMsg)
@@ -245,8 +266,9 @@ export function ChatView() {
         updateMessage(activeConv.id, assistantMsg.id, 'Attach a photo first, then try /edit again.')
         return
       }
-      pushActivity(kind === 'image' ? 'generate' : 'edit')
+      pushActivity(kind === 'edit' ? 'edit' : 'generate')
       setStreaming(true)
+      setStreamingId(assistantMsg.id)
       try {
         const result = await createImage(settings.backendUrl, token, {
           prompt: imagePrompt,
@@ -280,6 +302,7 @@ export function ChatView() {
         updateMessage(activeConv.id, assistantMsg.id, `⚠️ ${e?.message || 'Could not create that image.'}`)
       } finally {
         setStreaming(false)
+        setStreamingId(null)
       }
       return
     }
@@ -301,8 +324,10 @@ export function ChatView() {
     }
     const model = runtimeCfg.model || config.model || adapter.info.defaultModels[0]
 
-    const msgs = [...(existing?.messages ?? []), userMsg].map(m => ({ id: m.id, role: m.role, content: m.content, createdAt: m.createdAt }))
-    const historyForModel = msgs.filter(m => m.id !== assistantMsg.id)
+    // An explicit history is used by Regenerate: it contains the turns before
+    // the regenerated prompt, so the old answer and prompt are not sent twice.
+    const priorMessages = historyOverride ?? existing?.messages ?? []
+    const msgs = [...priorMessages, userMsg].map(m => ({ id: m.id, role: m.role, content: m.content, createdAt: m.createdAt }))
 
     // Documents are folded into the prompt (bounded so long files can't
     // overflow the model context); images are sent as attachments for vision.
@@ -318,13 +343,16 @@ export function ChatView() {
         used += slice.length
         parts.push(`--- Attached file: ${d.name} ---\n${slice}`)
       }
-      const last = historyForModel[historyForModel.length - 1]
+      const last = msgs[msgs.length - 1]
       if (last && parts.length) last.content = `${last.content}\n\n${parts.join('\n\n')}`
     }
     const imageAttachments = cleanAttachments.filter(a => a.kind === 'image')
 
     pushActivity(mode === 'coding' ? 'coding' : 'write')
     setStreaming(true)
+    setStreamingId(assistantMsg.id)
+    streamTextRef.current = ''
+    lastCommitRef.current = 0
     const ac = new AbortController()
     abortRef.current = ac
     let failed = false
@@ -332,15 +360,26 @@ export function ChatView() {
     let replyText = ''
     try {
       replyText = await adapter.chat(runtimeCfg, {
-        messages: historyForModel,
+        messages: msgs,
         model,
         settings: settings.generation,
         systemPrompt: MODE_PROMPTS[mode],
         signal: ac.signal,
         attachments: imageAttachments,
         fast: settings.fastReplies,
-        onChunk: (full) => updateMessage(activeConv.id, assistantMsg.id, full),
+        onChunk: (full) => {
+          streamTextRef.current = full
+          const now = Date.now()
+          if (now - lastCommitRef.current >= 120) {
+            lastCommitRef.current = now
+            updateMessage(activeConv.id, assistantMsg.id, full)
+          }
+        },
         onActivity: pushActivity,
+        onSources: (sources: WebSource[]) => {
+          // Only real, server-fetched URLs are stored on the reply.
+          if (sources.length) setMessageMeta(activeConv.id, assistantMsg.id, { sources: sources.slice(0, 6) })
+        },
       })
     } catch (e: any) {
       if (e?.status === 403) {
@@ -359,6 +398,12 @@ export function ChatView() {
         updateMessage(activeConv.id, assistantMsg.id, `⚠️ ${msg}`)
       }
     } finally {
+      // Commit the final text (or the partial text kept after Stop) once. The
+      // throttled chunk updates above are only for smooth rendering.
+      if (!failed) {
+        const finalText = replyText || streamTextRef.current
+        if (finalText) updateMessage(activeConv.id, assistantMsg.id, finalText)
+      }
       if (!failed && !aborted) {
         playReceive()
         if (replyText.trim()) {
@@ -370,9 +415,19 @@ export function ChatView() {
             lastAction: 'chat',
             extraTitle: `${MODES.find(m => m.id === mode)?.label || 'General'} reply`,
           })
+          // Replace the first-message placeholder with a real AI-written title.
+          // It is best effort and never blocks or changes the reply.
+          if (isFirst) {
+            void generateTitle(
+              settings.backendUrl,
+              token,
+              [...msgs.map(m => ({ role: m.role, content: m.content })), { role: 'assistant', content: replyText }],
+            ).then(title => { if (title) rename(activeConv.id, title) })
+          }
         }
       }
       setStreaming(false)
+      setStreamingId(null)
       abortRef.current = null
     }
   }
@@ -383,13 +438,16 @@ export function ChatView() {
     if (!conv || streaming) return
     const idx = conv.messages.findIndex(m => m.id === assistantId)
     if (idx < 0) return
-    removeMessage(conv.id, assistantId)
     let userIdx = idx - 1
     while (userIdx >= 0 && conv.messages[userIdx].role !== 'user') userIdx--
-    const userMsg = userIdx >= 0 ? conv.messages[userIdx] : null
-    if (!userMsg) return
+    if (userIdx < 0) return
+    const userMsg = conv.messages[userIdx]
+    // Everything before the prompt is the true context. Pass it explicitly so
+    // send() cannot reuse the stale closure that still held the old answer.
+    const history = conv.messages.slice(0, userIdx)
+    removeMessage(conv.id, assistantId)
     removeMessage(conv.id, userMsg.id)
-    await send(userMsg.content, userMsg.attachments)
+    await send(userMsg.content, userMsg.attachments, history)
   }
 
   const copy = async (id: string, content: string) => {
@@ -401,7 +459,14 @@ export function ChatView() {
       {/* header */}
       <div className="glass" style={{ margin: 12, padding: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ position: 'relative' }}>
-          <button className="btn ghost" onClick={() => setShowModeMenu(v => !v)} style={{ padding: '6px 10px', gap: 6 }}>
+          <button
+            className="btn ghost"
+            onClick={() => setShowModeMenu(v => !v)}
+            style={{ padding: '6px 10px', gap: 6 }}
+            aria-haspopup="menu"
+            aria-expanded={showModeMenu}
+            aria-label="Choose chat mode"
+          >
             {(() => { const M = MODES.find(m => m.id === mode); const I = M?.icon; return I ? <I size={14} style={{ color: 'var(--purple-2)' }} /> : null })()}
             {MODES.find(m => m.id === mode)?.label} <ChevronDown size={14} />
           </button>
@@ -470,13 +535,31 @@ export function ChatView() {
                 </div>
               )}
               {m.role === 'assistant' ? (
-                <div className="markdown">
+                <div className={`markdown${streaming && m.id === streamingId ? ' is-streaming' : ''}`}>
                   <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
                     {m.content || ''}
                   </ReactMarkdown>
                 </div>
               ) : (
                 <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
+              )}
+              {m.role === 'assistant' && !!m.sources?.length && (
+                <div className="source-chips" aria-label="Live web sources">
+                  <span className="source-label">Live sources</span>
+                  {m.sources.map((s, i) => (
+                    <a
+                      key={`${s.url}-${i}`}
+                      className="source-chip"
+                      href={/^https?:\/\//i.test(s.url) ? s.url : '#'}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={s.snippet || s.title}
+                    >
+                      <ExternalLink size={10} />
+                      <span>{s.title || s.url.replace(/^https?:\/\//, '').slice(0, 40)}</span>
+                    </a>
+                  ))}
+                </div>
               )}
               {m.role === 'assistant' && m.content && (
                 <div style={{ marginTop: 6 }}>
@@ -555,24 +638,24 @@ export function ChatView() {
         )}
         <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
           <div style={{ display: 'flex', gap: 2, paddingBottom: 4 }}>
-            <button className="btn ghost" style={{ padding: 8 }} title="Take a photo" onClick={() => cameraRef.current?.click()} disabled={preparing || pending.length >= MAX_ATTACHMENTS}>
+            <button className="btn ghost" style={{ padding: 8 }} title="Take a photo" aria-label="Take a photo" onClick={() => cameraRef.current?.click()} disabled={preparing || pending.length >= MAX_ATTACHMENTS}>
               <Camera size={18} />
             </button>
-            <button className="btn ghost" style={{ padding: 8 }} title="Photo library" onClick={() => photosRef.current?.click()} disabled={preparing || pending.length >= MAX_ATTACHMENTS}>
+            <button className="btn ghost" style={{ padding: 8 }} title="Photo library" aria-label="Choose a photo" onClick={() => photosRef.current?.click()} disabled={preparing || pending.length >= MAX_ATTACHMENTS}>
               <ImagePlus size={18} />
             </button>
-            <button className="btn ghost" style={{ padding: 8 }} title="Upload a file" onClick={() => filesRef.current?.click()} disabled={preparing || pending.length >= MAX_ATTACHMENTS}>
+            <button className="btn ghost" style={{ padding: 8 }} title="Upload a file" aria-label="Upload a file" onClick={() => filesRef.current?.click()} disabled={preparing || pending.length >= MAX_ATTACHMENTS}>
               {preparing ? <RobotIcon size={18} className="spin" /> : <Paperclip size={18} />}
             </button>
           </div>
           <div style={{ display: 'flex', gap: 2, paddingBottom: 4, paddingLeft: 6, marginLeft: 2, borderLeft: '1px solid var(--border)' }}>
-            <button className="btn ghost" style={{ padding: 8 }} title="Generate an image (/image)" onClick={() => { playTap(); setInput(v => `${v.trim() ? `${v.trim()} ` : ''}/image `); textareaRef.current?.focus() }} disabled={streaming}>
+            <button className="btn ghost" style={{ padding: 8 }} title="Generate an image (/image)" aria-label="Generate an image" onClick={() => { playTap(); setInput(v => `${v.trim() ? `${v.trim()} ` : ''}/image `); textareaRef.current?.focus() }} disabled={streaming}>
               <Sparkles size={18} style={{ color: 'var(--purple-2)' }} />
             </button>
-            <button className="btn ghost" style={{ padding: 8 }} title="Edit attached photo (/edit)" onClick={() => { playTap(); setInput(v => `${v.trim() ? `${v.trim()} ` : ''}/edit `); textareaRef.current?.focus() }} disabled={streaming}>
+            <button className="btn ghost" style={{ padding: 8 }} title="Edit attached photo (/edit)" aria-label="Edit attached photo" onClick={() => { playTap(); setInput(v => `${v.trim() ? `${v.trim()} ` : ''}/edit `); textareaRef.current?.focus() }} disabled={streaming}>
               <Wand2 size={18} style={{ color: 'var(--purple-2)' }} />
             </button>
-            <button className="btn ghost" style={{ padding: 8 }} title="Make an animated GIF (/gif)" onClick={() => { playTap(); setInput(v => `${v.trim() ? `${v.trim()} ` : ''}/gif `); textareaRef.current?.focus() }} disabled={streaming}>
+            <button className="btn ghost" style={{ padding: 8 }} title="Make an animated GIF (/gif)" aria-label="Make an animated GIF" onClick={() => { playTap(); setInput(v => `${v.trim() ? `${v.trim()} ` : ''}/gif `); textareaRef.current?.focus() }} disabled={streaming}>
               <Film size={18} style={{ color: 'var(--purple-2)' }} />
             </button>
           </div>
@@ -582,9 +665,16 @@ export function ChatView() {
             rows={1}
             value={input}
             onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
+            onKeyDown={e => {
+              // Do not steal Enter while composing CJK/IME text.
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault()
+                send()
+              }
+            }}
+            aria-label="Message NEXUS AI"
             placeholder="Message NEXUS AI…"
-            style={{ flex: 1, minHeight: 44, maxHeight: 120 }}
+            style={{ flex: 1, minHeight: 44, maxHeight: 160, overflowY: 'auto' }}
           />
           {streaming ? (
             <button className="btn danger" onClick={stop} style={{ height: 44 }}><Square size={16} /> Stop</button>

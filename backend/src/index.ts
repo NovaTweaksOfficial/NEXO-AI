@@ -1303,6 +1303,12 @@ export default {
       }, 200, cors)
     }
 
+    // Lightweight connectivity check for the Home status pill. It only says
+    // the Worker is reachable; it never claims the AI providers are online.
+    if (path === '/api/health' && req.method === 'GET') {
+      return json({ ok: true }, 200, cors)
+    }
+
     // Resolve moderation once for every API request. The owner console, auth
     // validation, and the restriction-status check stay reachable; everything
     // else (including sign-out) is locked while a restriction is enforced.
@@ -1329,6 +1335,44 @@ export default {
         const user = await getUser(req, env)
         const mod = await activeModeration(env, req, user)
         return json({ restriction: mod ? restrictionView(mod) : null }, 200, cors)
+      }
+
+      // Real AI-generated conversation titles. Best effort: the client keeps
+      // its local fallback title when this endpoint is unavailable.
+      if (path === '/api/title' && req.method === 'POST') {
+        const body = await parseBody(req)
+        const incoming = Array.isArray(body?.messages) ? body.messages.slice(-6) : []
+        const transcript = incoming
+          .filter((m: any) => m && ['user', 'assistant'].includes(m.role) && typeof m.content === 'string')
+          .map((m: any) => `${m.role === 'user' ? 'User' : 'NEXUS'}: ${String(m.content).split(OWNER_MARKER).join('[removed]').slice(0, 1500)}`)
+          .join('\n')
+          .slice(0, 6000)
+        if (!transcript) return json({ title: '' }, 200, cors)
+        const titleMessages = [
+          {
+            role: 'system',
+            content:
+              `${NEXUS_IDENTITY} Name this conversation with a short, specific title. ` +
+              'Return only the title: maximum 6 words, no quotes, no markdown, no explanation, ' +
+              'and never mention any provider, vendor, or model name.',
+          },
+          { role: 'user', content: transcript },
+        ]
+        const settings: ChatSettings = { temperature: 0.2, maxTokens: 32, topP: 1, stream: false }
+        const key = apiKeyFor(env, 'pollinations')
+        const { base, model } = upstreamFor('pollinations', key, undefined, undefined)
+        let title = ''
+        try {
+          const first = await callChatUpstream(base, key, { model, messages: titleMessages, ...settings })
+          title = first?.text || ''
+          if (!title) title = (await runWorkersAI(env, titleMessages, settings, false)).text || ''
+        } catch { /* best effort; the client already has a fallback title */ }
+        const clean = String(title)
+          .split('\n')[0]
+          .replace(/^[\s"'#*`\-]+|[\s"'#*`\-]+$/g, '')
+          .replace(/\s+/g, ' ')
+          .slice(0, 60)
+        return json({ title: clean }, 200, cors)
       }
 
       // ------------------------------------------------------------- auth
@@ -1992,7 +2036,21 @@ export default {
             searchQuery = searchQuery.slice(0, 300)
             const results = await webSearch(searchQuery)
             await emit({ activity: 'fetched web search' })
-            if (results.length) await emit({ activity: 'grep' })
+            if (results.length) {
+              await emit({ activity: 'grep' })
+              // Real URLs the Worker fetched, so the UI can show verifiable
+              // sources instead of asking the user to trust a claim.
+              await emit({
+                sources: results.slice(0, 6).map(r => ({
+                  title: String(r.title || '').slice(0, 140),
+                  url: String(r.url || '').slice(0, 600),
+                  snippet: String(r.snippet || '').slice(0, 240),
+                })),
+              })
+            } else {
+              await emit({ sources: [] })
+              await emit({ activity: 'no live sources available' })
+            }
             searchBlock = results.length
               ? webContext(searchQuery, results)
               : `--- LIVE WEB SEARCH for "${searchQuery.slice(0, 200)}" ---\n` +
@@ -2140,7 +2198,15 @@ export default {
             await emit({ activity: 'shell' })
           }
 
-          await recordUsage(env, usedWorkersAi ? 1 : 0, 0, textReplyNeurons(chatMessages, replyText))
+          // Every real reply counts as activity. Neurons are an estimate of
+          // Cloudflare AI spend only, so keyless/self-hosted replies must not
+          // be charged against that allocation in the UI.
+          await recordUsage(
+            env,
+            1,
+            0,
+            usedWorkersAi ? textReplyNeurons(chatMessages, replyText) : 0,
+          )
           const screened = await screenReply(env, req, currentUser, lastUserText, replyText, cors)
           if (screened.kind === 'response') return screened.response
           return screened.text

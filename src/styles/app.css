@@ -545,3 +545,52 @@ html[data-motion='off'] *::after {
 .arcade-pad-2 { border-color: rgba(236, 72, 153, 0.45); }
 .arcade-pad-3 { border-color: rgba(34, 197, 94, 0.45); }
 .arcade-note { margin-top: 10px; text-align: center; font-size: 10.5px; color: var(--text-3); }
+
+/* Visible keyboard focus across the whole app. */
+:where(button, a, input, textarea, [role="button"]):focus-visible {
+  outline: 2px solid var(--purple-2);
+  outline-offset: 2px;
+}
+
+/* Live-search sources attached to a reply. Only real fetched URLs appear here. */
+.source-chips {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+  margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--border);
+}
+.source-label { font-size: 10px; color: var(--text-3); margin-right: 2px; }
+.source-chip {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 190px;
+  padding: 3px 7px; border-radius: 999px; text-decoration: none;
+  border: 1px solid var(--border-strong); background: rgba(139, 92, 246, 0.08);
+  color: var(--text-2); font-size: 10.5px;
+}
+.source-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-chip:hover { color: var(--text); border-color: var(--purple-2); }
+
+/* Honest streaming affordance: the reply is still being written. */
+.markdown.is-streaming::after {
+  content: ''; display: inline-block; width: 6px; height: 14px;
+  margin-left: 3px; vertical-align: -2px; border-radius: 2px;
+  background: var(--purple-2); animation: caret-blink 1s steps(2, start) infinite;
+}
+@keyframes caret-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .markdown.is-streaming::after { animation: none; }
+}
+
+/* Toolbox artifacts */
+.artifact-list { display: flex; flex-direction: column; gap: 10px; }
+.artifact-file {
+  border: 1px solid var(--border); border-radius: 12px; padding: 10px;
+  background: rgba(8, 8, 16, 0.55); overflow: hidden;
+}
+.artifact-code, .artifact-prose {
+  margin: 0; white-space: pre-wrap; word-break: break-word;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11.5px; line-height: 1.55; color: var(--text-2);
+}
+.artifact-code { max-height: 360px; overflow: auto; }
+.artifact-prose { font-size: 13px; line-height: 1.6; }
+.artifact-raw { margin-top: 10px; font-size: 11px; color: var(--text-3); }
+.artifact-raw summary { cursor: pointer; display: flex; align-items: center; gap: 4px; }
+.artifact-raw pre { margin-top: 8px; max-height: 240px; overflow: auto; }

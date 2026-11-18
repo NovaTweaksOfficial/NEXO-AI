@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useChat } from '@/state/chat'
 import { useUi } from '@/state/ui'
-import { Trash2, Edit3, MessageSquare } from 'lucide-react'
+import { Trash2, Edit3, MessageSquare, Download, DownloadCloud } from 'lucide-react'
+import { exportAllConversations, exportConversation } from '@/lib/transcript'
 
 export function HistoryView() {
   const { conversations, select, rename, remove, search, clearAll } = useChat()
@@ -19,8 +20,20 @@ export function HistoryView() {
 
   return (
     <div className="page">
-      <h2 style={{ margin: '0 0 12px', fontSize: 22, fontWeight: 700 }}>History</h2>
-      <input className="input" placeholder="Search conversations…" value={q} onChange={e => setQ(e.target.value)} style={{ marginBottom: 12 }} />
+      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
+        <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>History</h2>
+        {conversations.length > 0 && (
+          <button
+            className="btn ghost"
+            style={{ fontSize: 11 }}
+            onClick={() => exportAllConversations(conversations)}
+            aria-label="Export all conversations as JSON"
+          >
+            <DownloadCloud size={14} /> Export all
+          </button>
+        )}
+      </div>
+      <input className="input" placeholder="Search conversations…" value={q} onChange={e => setQ(e.target.value)} style={{ marginBottom: 12 }} aria-label="Search conversations" />
       {conversations.length === 0 && <div className="empty-state">No conversations yet.</div>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {list.map(c => (
@@ -39,8 +52,9 @@ export function HistoryView() {
                 </>
               )}
             </div>
-            <button className="btn ghost" style={{ padding: 6 }} onClick={() => { setEditing(c.id); setEditTitle(c.title) }}><Edit3 size={14} /></button>
-            <button className="btn ghost" style={{ padding: 6 }} onClick={() => remove(c.id)}><Trash2 size={14} /></button>
+            <button className="btn ghost" style={{ padding: 6 }} onClick={() => exportConversation(c)} aria-label={`Export ${c.title}`}><Download size={14} /></button>
+            <button className="btn ghost" style={{ padding: 6 }} onClick={() => { setEditing(c.id); setEditTitle(c.title) }} aria-label={`Rename ${c.title}`}><Edit3 size={14} /></button>
+            <button className="btn ghost" style={{ padding: 6 }} onClick={() => remove(c.id)} aria-label={`Delete ${c.title}`}><Trash2 size={14} /></button>
           </div>
         ))}
       </div>

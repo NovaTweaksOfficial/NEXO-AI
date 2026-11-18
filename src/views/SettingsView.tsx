@@ -181,7 +181,7 @@ export function SettingsView() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Activity size={16} style={{ color: 'var(--purple-2)' }} />
-            <strong style={{ fontSize: 14 }}>Daily AI usage</strong>
+            <strong style={{ fontSize: 14 }}>Daily usage</strong>
           </div>
           <button className="btn ghost" style={{ padding: 4 }} onClick={() => void refreshUsage()} title="Refresh usage">
             <RefreshCw size={14} />
@@ -203,11 +203,14 @@ export function SettingsView() {
               }} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 7, fontSize: 11.5, color: 'var(--text-3)' }}>
-              <span>{Math.round(usedPct)}% used · {usage.remaining.toLocaleString()} left</span>
+              <span>{Math.round(usedPct)}% of included allocation used</span>
               <span>Resets {resetTime} · {timeLeft}</span>
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>
-              ~{usage.replies} repl{usage.replies === 1 ? 'y' : 'ies'} · ~{usage.images} photo{usage.images === 1 ? '' : 's'} today · estimated
+              ~{usage.replies} repl{usage.replies === 1 ? 'y' : 'ies'} · ~{usage.images} photo{usage.images === 1 ? '' : 's'} today · estimate
+            </div>
+            <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 4 }}>
+              Only replies served by the included engine count against this allocation.
             </div>
           </>
         )}

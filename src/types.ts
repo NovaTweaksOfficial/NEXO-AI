@@ -18,12 +18,21 @@ export interface Attachment {
   text?: string
 }
 
+/** A real source returned by the server-side live search. */
+export interface WebSource {
+  title: string
+  url: string
+  snippet?: string
+}
+
 export interface ChatMessage {
   id: string
   role: MessageRole
   content: string
   createdAt: number
   attachments?: Attachment[]
+  /** Live-search sources that the server actually fetched for this reply. */
+  sources?: WebSource[]
 }
 
 export interface AuthUser {

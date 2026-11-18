@@ -46,6 +46,17 @@ npm run preview
 - **Stronger vision:** image analysis transcribes visible text and error messages, identifies objects/brands/models, and labels guesses as guesses.
 - **NEXUS Memory:** signed-in users can explicitly save up to 30 durable facts in Settings. Memories are scoped to the account, editable, and injected as context only; NEXUS never infers or stores memories from private chats.
 
+## Chat and Toolbox upgrades
+
+- **Regenerate is context-correct:** only the previous assistant answer and its prompt are replaced; the rest of the conversation is passed unchanged.
+- **Smoother streaming:** reply text is rendered in short batches and committed once when finished (or when Stop is pressed), so long answers don't stutter or spam storage.
+- **Live source chips:** when server-side search fetches real pages, their titles become clickable source chips under the reply. No results produces an honest "no live sources available" status instead of invented citations.
+- **Real AI titles:** the first reply triggers a tiny best-effort AI call that names the conversation; the local first-line title remains as a fallback.
+- **Toolbox artifacts:** `=== filename ===` sections are rendered as copyable file cards with a compact raw-response view. Long tool runs can be stopped.
+- **Export:** History can export one chat as Markdown or every chat as a JSON backup. Exports stay on the device.
+- **Honest status:** Home checks a real health endpoint before showing Core as Connected, Checking…, or Unavailable.
+- **Usage accuracy:** only replies actually served by the included engine are counted against its allocation; every real reply still counts as activity.
+
 ## Fun, progress, and shortcuts
 
 - **Operator progress:** real replies, images, tool runs, and reactions earn XP. Levels, daily streaks, best streak, badges, quests, and message stickers are scoped per identity. Signed-in progress is merged with an account copy on D1 and follows the user across devices; guests keep theirs on the device only.

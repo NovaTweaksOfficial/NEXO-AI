@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useUi } from '@/state/ui'
 import { useSettings } from '@/state/settings'
 import { useAuth } from '@/state/auth'
@@ -6,6 +6,7 @@ import { useChat } from '@/state/chat'
 import { useProgress } from '@/state/progress'
 import { RobotMascot } from '@/components/RobotMascot'
 import { playTap } from '@/lib/sounds'
+import { fetchHealth } from '@/lib/api'
 import {
   ACHIEVEMENTS, COMPANION_LINES, QUESTS, dayKey, moodFrom,
 } from '@/lib/gamification'
@@ -44,6 +45,17 @@ export function HomeView() {
   const { state, level, claimDaily } = useProgress()
   const [showAllBadges, setShowAllBadges] = useState(false)
   const [lineIndex, setLineIndex] = useState(0)
+  const [coreStatus, setCoreStatus] = useState<'checking' | 'connected' | 'offline'>('checking')
+
+  // The status pill reflects a real connectivity check, not a hardcoded label.
+  useEffect(() => {
+    let cancelled = false
+    setCoreStatus('checking')
+    fetchHealth(settings.backendUrl)
+      .then(res => { if (!cancelled) setCoreStatus(res.ok ? 'connected' : 'offline') })
+      .catch(() => { if (!cancelled) setCoreStatus('offline') })
+    return () => { cancelled = true }
+  }, [settings.backendUrl])
 
   const mood = moodFrom(state.lastAction, level.level, state.streak)
   const lines = COMPANION_LINES[mood]
@@ -145,7 +157,14 @@ export function HomeView() {
       </div>
 
       <div className="section-title">Continue</div>
-      <div className="card continue-card" onClick={() => { playTap(); setTab('chat') }} role="button" tabIndex={0}>
+      <div
+        className="card continue-card"
+        onClick={() => { playTap(); setTab('chat') }}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); playTap(); setTab('chat') } }}
+        role="button"
+        tabIndex={0}
+        aria-label="Continue chatting"
+      >
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -232,7 +251,14 @@ export function HomeView() {
       </div>
 
       <div className="section-title">Playground</div>
-      <div className="arcade-card" onClick={() => { playTap(); setArcadeOpen(true) }} role="button" tabIndex={0}>
+      <div
+        className="arcade-card"
+        onClick={() => { playTap(); setArcadeOpen(true) }}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); playTap(); setArcadeOpen(true) } }}
+        role="button"
+        tabIndex={0}
+        aria-label="Play NEXUS Circuit"
+      >
         <Gamepad2 size={24} style={{ color: 'var(--purple-2)' }} />
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 700, fontSize: 14 }}>NEXUS Circuit</div>
@@ -242,9 +268,14 @@ export function HomeView() {
       </div>
 
       <div className="section-title">AI Engine</div>
-      <div className="glass" style={{ padding: 12, fontSize: 13, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }} />
-        NEXUS Core · Ready
+      <div className="glass" style={{ padding: 12, fontSize: 13, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 8 }} role="status" aria-live="polite">
+        <span style={{
+          width: 6, height: 6, borderRadius: '50%', display: 'inline-block',
+          background: coreStatus === 'connected'
+            ? 'var(--success)'
+            : coreStatus === 'offline' ? 'var(--danger)' : 'var(--text-3)',
+        }} />
+        NEXUS Core · {coreStatus === 'connected' ? 'Connected' : coreStatus === 'offline' ? 'Unavailable' : 'Checking…'}
       </div>
     </div>
   )

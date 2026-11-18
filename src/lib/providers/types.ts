@@ -1,4 +1,4 @@
-import type { ChatMessage, GenerationSettings, ProviderId, Attachment } from '@/types'
+import type { ChatMessage, GenerationSettings, ProviderId, Attachment, WebSource } from '@/types'
 
 export interface RuntimeConfig {
   provider: ProviderId
@@ -31,6 +31,8 @@ export interface ChatOptions {
   onChunk?: (text: string) => void
   /** Honest step labels emitted by the backend while it works. */
   onActivity?: (label: string) => void
+  /** Live sources fetched by the server for this reply, when any. */
+  onSources?: (sources: WebSource[]) => void
   attachments?: Attachment[]
   /** Skip the throttled free-engine check and use the direct fallback engine. */
   fast?: boolean

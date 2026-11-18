@@ -48,6 +48,11 @@ export async function apiRequest<T = any>(
   return res.json()
 }
 
+// -------------------------------------------------------------- health
+export async function fetchHealth(base: string): Promise<{ ok: boolean }> {
+  return apiRequest<{ ok: boolean }>(base, '/api/health')
+}
+
 // --------------------------------------------------------------- usage
 export interface UsageInfo {
   day: string
@@ -117,6 +122,25 @@ export async function logout(base: string, token: string) {
 
 export async function me(base: string, token: string) {
   return apiRequest<{ user: AuthUser }>(base, '/api/auth/me', { token })
+}
+
+// --------------------------------------------------------------- titles
+/** Best-effort real-AI title for a new conversation. */
+export async function generateTitle(
+  base: string,
+  token: string | null,
+  messages: Array<{ role: string; content: string }>,
+): Promise<string> {
+  try {
+    const data = await apiRequest<{ title?: string }>(base, '/api/title', {
+      method: 'POST',
+      ...(token ? { token } : {}),
+      body: { messages },
+    })
+    return typeof data?.title === 'string' ? data.title.trim().slice(0, 60) : ''
+  } catch {
+    return ''
+  }
 }
 
 // -------------------------------------------------------- conversations

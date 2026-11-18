@@ -44,9 +44,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const backend = settings.backendUrl
 
   const [stored, setStored] = useState<StoredAuth | null>(() => readStored())
-  const [status, setStatus] = useState<Status>(() => (readStored() ? 'loading' : 'signedOut'))
   const [guest, setGuest] = useState<boolean>(() => {
     try { return localStorage.getItem(GUEST_KEY) === '1' } catch { return false }
+  })
+  // Avoid an AuthView flash for returning guests while the session check runs.
+  const [status, setStatus] = useState<Status>(() => {
+    if (readStored()) return 'loading'
+    try { return localStorage.getItem(GUEST_KEY) === '1' ? 'guest' : 'signedOut' } catch { return 'signedOut' }
   })
 
   // Validate an existing session once on load.

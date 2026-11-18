@@ -166,6 +166,10 @@ async function chatViaBackend(cfg: RuntimeConfig, opts: ChatOptions): Promise<st
         opts.onActivity?.(json.activity)
         continue
       }
+      if (Array.isArray(json?.sources)) {
+        opts.onSources?.(json.sources)
+        continue
+      }
       if (json?.moderation || json?.error) {
         const err: any = new Error(String(json.error || 'Request failed.'))
         if (json.moderation) { err.status = 403; err.moderation = json.moderation }
