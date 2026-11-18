@@ -85,7 +85,9 @@ export function HomeView() {
       <header className="row" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
         <div style={{ minWidth: 0 }}>
           <h1 className="title-gradient" style={{ fontSize: 26, margin: 0, fontWeight: 800 }}>NEXUS AI</h1>
-          <p style={{ color: 'var(--text-2)', fontSize: 13, margin: '4px 0 0' }}>{greeting()}. Core is online.</p>
+          <p style={{ color: 'var(--text-2)', fontSize: 13, margin: '4px 0 0' }}>
+            {greeting()}. {coreStatus === 'connected' ? 'Ready when you are.' : 'Your AI workspace is here.'}
+          </p>
         </div>
         <div className="row" style={{ gap: 6 }}>
           <button className="btn ghost" style={{ padding: '7px 9px' }} onClick={() => { playTap(); setPaletteOpen(true) }} aria-label="Open command palette">
