@@ -12,7 +12,7 @@ import { playTap } from '@/lib/sounds'
 import { RobotIcon } from '@/components/RobotMascot'
 import {
   Wifi, Check, X, LogOut, UserCircle2, Cloud, Activity, RefreshCw, Zap, Volume2,
-  Trophy, Flame, RotateCcw, Brain, Plus, Trash2,
+  Trophy, Flame, RotateCcw, Brain, Plus, Trash2, Gauge,
 } from 'lucide-react'
 
 function Toggle({ on, onChange, label }: { on: boolean; onChange: () => void; label: string }) {
@@ -107,7 +107,7 @@ export function SettingsView() {
 
   const testConn = async () => {
     if (!selectedConfig) {
-      setTestResult({ ok: false, message: 'NEXUS Core is not configured. Set the NEXUS Cloud Endpoint below.' })
+      setTestResult({ ok: false, message: 'NEXUS Core is not available right now. Try again in a moment.' })
       return
     }
     setTesting(true); setTestResult(null)
@@ -216,68 +216,61 @@ export function SettingsView() {
         )}
       </div>
 
-      {/* Fast replies */}
+      {/* Reply efficiency */}
       <div className="glass" style={{ padding: 14, marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Zap size={16} style={{ color: 'var(--purple-2)' }} />
+        <div className="row" style={{ justifyContent: 'space-between', gap: 10 }}>
+          <div className="row" style={{ gap: 8 }}>
+            <Gauge size={16} style={{ color: 'var(--accent-2, var(--purple-2))' }} />
             <div>
-              <strong style={{ fontSize: 14 }}>Fast replies</strong>
+              <strong style={{ fontSize: 14 }}>Efficient replies</strong>
               <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
-                {settings.fastReplies ? 'On' : 'Off'} · {usage?.pollenConfigured ? 'server key active' : 'no server key configured'}
+                {settings.efficientReplies ? 'On · recommended' : 'Off'}
               </div>
             </div>
           </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={!!settings.fastReplies}
-            aria-label="Fast replies"
-            onClick={() => {
-              update({ fastReplies: !settings.fastReplies })
-              playTap()
-            }}
-            style={{
-              width: 44, height: 25, borderRadius: 99, border: 'none', padding: 3,
-              cursor: 'pointer', flexShrink: 0,
-              background: settings.fastReplies ? 'var(--purple-2)' : 'rgba(255,255,255,0.16)',
-              display: 'flex', alignItems: 'center',
-              justifyContent: settings.fastReplies ? 'flex-end' : 'flex-start',
-            }}
-          >
-            <span style={{ width: 19, height: 19, borderRadius: '50%', background: '#fff', display: 'block' }} />
-          </button>
+          <Toggle
+            label="Efficient replies"
+            on={!!settings.efficientReplies}
+            onChange={() => { playTap(); update({ efficientReplies: !settings.efficientReplies }) }}
+          />
         </div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.6, marginTop: 10 }}>
+          Everyday chats use a shorter instruction set, tighter recent context, fewer extra web fetches,
+          and one concise title call. This spends fewer tokens without changing the AI or faking replies.
+          Finished builds still get full files and the room they need.
+        </div>
+        <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 8 }}>
+          Photos still use real vision and count toward the included allocation.
+        </div>
+      </div>
 
+      {/* Fast replies */}
+      <div className="glass" style={{ padding: 14, marginBottom: 12 }}>
+        <div className="row" style={{ justifyContent: 'space-between', gap: 10 }}>
+          <div className="row" style={{ gap: 8 }}>
+            <Zap size={16} style={{ color: 'var(--accent-2, var(--purple-2))' }} />
+            <div>
+              <strong style={{ fontSize: 14 }}>Fast replies</strong>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+                {settings.fastReplies ? 'On' : 'Off'}
+              </div>
+            </div>
+          </div>
+          <Toggle
+            label="Fast replies"
+            on={!!settings.fastReplies}
+            onChange={() => { playTap(); update({ fastReplies: !settings.fastReplies }) }}
+          />
+        </div>
         <div style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.6, marginTop: 10 }}>
           {settings.fastReplies ? (
-            usage?.pollenConfigured ? (
-              <>
-                A server pollen key is active, so messages go back-to-back with no per-IP throttle —
-                same engine and quality, typically <strong>1–3 seconds</strong> per reply. If the key
-                runs out of credits or the service is down, NEXUS falls back automatically.
-              </>
-            ) : (
-              <>
-                Every reply goes straight to NEXUS Core's fallback engine instead of first checking
-                the free engine. That saves roughly <strong>0.5–1 second</strong> per message. It does
-                <strong> not</strong> remove limits: each reply still spends the shared daily budget —
-                about <strong>100–140 replies</strong> before the {resetTime || 'next'} reset, after which
-                NEXUS pauses until that time.
-              </>
-            )
+            'NEXUS skips the initial availability check and goes straight to the always-ready route. Same replies, less waiting.'
           ) : (
-            <>
-              NEXUS tries the free engine first, which costs <strong>nothing</strong> from the daily
-              budget when it is available. When it is busy — about <strong>1 reply per 30–45 seconds</strong> —
-              NEXUS automatically retries on the fallback engine, adding roughly{' '}
-              <strong>0.5–1.5 seconds</strong> to that reply. Turn this on to skip that check and reply faster.
-            </>
+            'NEXUS first tries the free route, then retries automatically if it is busy. That can add a moment to a reply.'
           )}
         </div>
         <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 8 }}>
-          Applies to new text messages only. Photos always use the vision engine and still count toward
-          the daily budget, as do uploads of 4 files / 6 MB per message.
+          Text messages only. Photos and file uploads still count toward the included allocation.
         </div>
       </div>
 
@@ -304,41 +297,31 @@ export function SettingsView() {
         )}
       </div>
 
-      {/* Cloud endpoint (advanced) */}
-      <div className="glass" style={{ padding: 14, marginBottom: 12 }}>
-        <div style={{ fontWeight: 600, marginBottom: 6 }}>NEXUS Cloud Endpoint</div>
-        <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
-          Advanced. The secure endpoint that powers NEXUS Core. Leave the default unless you run your own deployment.
-        </p>
-        <input className="input" value={settings.backendUrl} onChange={e => update({ backendUrl: e.target.value })} placeholder="https://your-nexus-endpoint.workers.dev" />
-      </div>
-
       {/* Generation settings */}
       <div className="glass" style={{ padding: 14, marginBottom: 12 }}>
         <div style={{ fontWeight: 600, marginBottom: 8 }}>Generation</div>
         <label style={{ fontSize: 12, color: 'var(--text-2)' }}>Temperature: {settings.generation.temperature}</label>
         <input type="range" min="0" max="2" step="0.1" value={settings.generation.temperature} onChange={e => update({ generation: { ...settings.generation, temperature: parseFloat(e.target.value) } })} style={{ width: '100%' }} />
-        <label style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 8, display: 'block' }}>Max tokens: {settings.generation.maxTokens}</label>
-        <input type="range" min="64" max="4096" step="64" value={settings.generation.maxTokens} onChange={e => update({ generation: { ...settings.generation, maxTokens: parseInt(e.target.value) } })} style={{ width: '100%' }} />
+        <label style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 8, display: 'block' }}>
+          Everyday reply cap: {settings.efficientReplies ? Math.min(settings.generation.maxTokens, 1024) : settings.generation.maxTokens}
+        </label>
+        <input type="range" min="256" max="4096" step="64" value={settings.generation.maxTokens} onChange={e => update({ generation: { ...settings.generation, maxTokens: parseInt(e.target.value) } })} style={{ width: '100%' }} />
+        <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 4 }}>
+          Finished builds automatically get a larger cap.
+        </div>
         <div className="row" style={{ marginTop: 8, gap: 8 }}>
           <label style={{ fontSize: 12, color: 'var(--text-2)' }}>Streaming</label>
           <input type="checkbox" checked={settings.generation.stream} onChange={e => update({ generation: { ...settings.generation, stream: e.target.checked } })} />
         </div>
       </div>
 
-      {/* Theme & accent */}
+      {/* Appearance */}
       <div className="glass" style={{ padding: 14, marginBottom: 12 }}>
         <div style={{ fontWeight: 600, marginBottom: 8 }}>Appearance</div>
         <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 4 }}>Theme</div>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+        <div style={{ display: 'flex', gap: 6 }}>
           {(['dark', 'darker', 'midnight'] as const).map(t => (
             <button key={t} className={`btn ${settings.theme === t ? 'primary' : 'ghost'}`} style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => update({ theme: t })}>{t}</button>
-          ))}
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 4 }}>Accent</div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {(['purple', 'blue', 'cyan', 'pink'] as const).map(a => (
-            <button key={a} className={`btn ${settings.accent === a ? 'primary' : 'ghost'}`} style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => update({ accent: a })}>{a}</button>
           ))}
         </div>
       </div>

@@ -58,9 +58,8 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', settings.theme)
-    document.documentElement.setAttribute('data-accent', settings.accent)
     document.documentElement.setAttribute('data-motion', settings.reducedMotion ? 'off' : 'on')
-  }, [settings.theme, settings.accent, settings.reducedMotion])
+  }, [settings.theme, settings.reducedMotion])
 
   // Global shortcuts: ⌘K / Ctrl+K opens the command palette anywhere in the
   // signed-in app; Escape closes whichever overlay is on top.
@@ -106,9 +105,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <div className="nexus-aurora" aria-hidden="true">
-        <span className="aurora-orb aurora-orb-1" />
-        <span className="aurora-orb aurora-orb-2" />
-        <span className="aurora-orb aurora-orb-3" />
+        <span className="aurora-orb" />
         <span className="aurora-grid" />
       </div>
       <main style={{ flex: 1, overflow: 'auto' }}>

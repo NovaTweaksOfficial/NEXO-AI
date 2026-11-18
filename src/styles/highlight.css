@@ -1,0 +1,59 @@
+/* Local monochrome + violet highlight.js theme.
+   Background is transparent so code inherits the surrounding dark surface. */
+.hljs {
+  background: transparent;
+  color: #d4d4d8;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: #71717e;
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag,
+.hljs-type,
+.hljs-name {
+  color: #a78bfa;
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute,
+.hljs-meta .hljs-string {
+  color: #c4b5fd;
+}
+
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.function_,
+.hljs-section,
+.hljs-built_in {
+  color: #ddd6fe;
+}
+
+.hljs-number,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-attr,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link {
+  color: #d4d4d8;
+}
+
+.hljs-subst,
+.hljs-punctuation {
+  color: #a1a1aa;
+}
+
+.hljs-deletion {
+  color: #fca5a5;
+}
+
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }

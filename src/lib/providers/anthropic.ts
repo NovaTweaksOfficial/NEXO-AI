@@ -161,6 +161,6 @@ async function testAnthropicBackend(cfg: RuntimeConfig): Promise<{ ok: boolean; 
     const data = await res.json()
     return { ok: !!data?.ok, message: data?.message || (res.ok ? 'OK' : 'Failed') }
   } catch (e: any) {
-    return { ok: false, message: e?.message || 'Backend unreachable.' }
+    return { ok: false, message: e?.message || 'NEXUS Core is unreachable.' }
   }
 }

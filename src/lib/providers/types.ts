@@ -36,6 +36,8 @@ export interface ChatOptions {
   attachments?: Attachment[]
   /** Skip the throttled free-engine check and use the direct fallback engine. */
   fast?: boolean
+  /** Let the server use a tighter context and shorter everyday instructions. */
+  efficient?: boolean
 }
 
 export interface ProviderAdapter {

@@ -85,6 +85,8 @@ export interface AppSettings {
   saveHistory: boolean
   /** Skip the throttled free-engine check and use the direct fallback engine. */
   fastReplies: boolean
+  /** Use a tighter context and shorter instructions for everyday replies. */
+  efficientReplies: boolean
   /** Local XP, streaks, quests, and celebration effects. Never sent to a server. */
   funMode: boolean
   /** Cursor-tracking, clickable NEXUS companion. */

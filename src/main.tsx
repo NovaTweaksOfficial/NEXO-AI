@@ -8,7 +8,7 @@ import { UiProvider } from './state/ui'
 import { ProgressProvider } from './state/progress'
 import App from './App'
 import './styles/app.css'
-import 'highlight.js/styles/github-dark.css'
+import './styles/highlight.css'
 
 // The desktop app loads from file:// where service workers cannot work; the
 // PWA's offline handler would otherwise replace the page with an error.

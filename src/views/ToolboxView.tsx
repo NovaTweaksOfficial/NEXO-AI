@@ -128,11 +128,12 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
   const [copied, setCopied] = useState(false)
   const [copiedFile, setCopiedFile] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const sendingRef = useRef(false)
   const lastCommitRef = useRef(0)
 
-  const run = async () => {
+  const runInner = async () => {
     if (!input.trim() || loading) return
-    if (!cfg) { playError(); setError('No AI provider configured. Go to Settings.'); return }
+    if (!cfg) { playError(); setError('NEXUS Core is not ready. Try again in a moment.'); return }
     playSend()
     const runId = uid()
     let succeeded = false
@@ -153,15 +154,25 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
       backendUrl: settings.backendUrl,
       token,
     }
+    const isBuildTool = tool.id === 'gorilla-tag-mods' || tool.id === 'mods-general'
+    const everydayGeneration = settings.efficientReplies
+      ? { ...settings.generation, maxTokens: Math.min(settings.generation.maxTokens, 1024) }
+      : settings.generation
+    const generation = isBuildTool
+      ? { ...settings.generation, maxTokens: 4096 }
+      : everydayGeneration
+    const systemPrompt = cfg.mode === 'backend'
+      ? tool.systemPrompt
+      : `${NEXUS_IDENTITY} ${tool.systemPrompt}`
     try {
       const text = await adapter.chat(runtimeCfg, {
         messages: [{ id: uid(), role: 'user', content: input, createdAt: Date.now() }],
         model: runtimeCfg.model,
-        settings: tool.id === 'gorilla-tag-mods' || tool.id === 'mods-general'
-          ? { ...settings.generation, maxTokens: 4096 }
-          : settings.generation,
-        systemPrompt: `${NEXUS_IDENTITY} ${tool.systemPrompt}`,
+        settings: generation,
+        systemPrompt,
         signal: ac.signal,
+        fast: settings.fastReplies,
+        efficient: settings.efficientReplies,
         onChunk: (full) => {
           partial = full
           const now = Date.now()
@@ -194,6 +205,16 @@ function ToolRunner({ tool, onBack }: { tool: ToolDef; onBack: () => void }) {
       if (succeeded) playReceive()
       setLoading(false)
       abortRef.current = null
+    }
+  }
+
+  const run = async () => {
+    if (sendingRef.current) return
+    sendingRef.current = true
+    try {
+      await runInner()
+    } finally {
+      sendingRef.current = false
     }
   }
 

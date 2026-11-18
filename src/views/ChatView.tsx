@@ -38,15 +38,38 @@ const MODES = [
   { id: 'research', label: 'Research', desc: 'Research assistance', icon: Search },
 ] as const
 
-const MODE_PROMPTS: Record<string, string> = {
-  general: `${NEXUS_IDENTITY} Be friendly and concise.`,
-  coding: `${NEXUS_IDENTITY} You are in Coding mode. Provide correct, well-explained code. Use markdown code blocks with language tags. Debug carefully.`,
-  creative: `${NEXUS_IDENTITY} You are in Creative mode. Be imaginative, vivid, and inspiring.`,
-  study: `${NEXUS_IDENTITY} You are in Study mode. Teach clearly, step by step, with examples and checks for understanding.`,
-  research: `${NEXUS_IDENTITY} You are in Research mode. Organize information, cite reasoning, and be thorough.`,
+// Mode instructions only. The brand identity is added by the Worker in backend
+// mode, so sending NEXUS_IDENTITY here would duplicate ~150 tokens per reply.
+const MODE_INSTRUCTIONS: Record<string, string> = {
+  general: 'Be friendly and concise.',
+  coding: 'You are in Coding mode. Provide correct, well-explained code. Use markdown code blocks with language tags. Debug carefully.',
+  creative: 'You are in Creative mode. Be imaginative, vivid, and inspiring.',
+  study: 'You are in Study mode. Teach clearly, step by step, with examples and checks for understanding.',
+  research: 'You are in Research mode. Organize information, cite reasoning, and be thorough.',
 }
 
 const MAX_ATTACHMENTS = 4
+
+// Keep the original prompt anchor plus the latest turns. This avoids sending an
+// entire long conversation on every follow-up while still understanding "it".
+function trimContext(messages: ChatMessage[], limit: number): ChatMessage[] {
+  if (messages.length <= limit) return messages
+  const firstUserIndex = messages.findIndex(m => m.role === 'user')
+  const head = firstUserIndex >= 0 ? [messages[firstUserIndex]] : []
+  const from = Math.max(firstUserIndex + 1, messages.length - (limit - head.length))
+  return [...head, ...messages.slice(from)]
+}
+
+function contextForRequest(messages: ChatMessage[], efficient: boolean): ChatMessage[] {
+  const trimmed = trimContext(messages, efficient ? 12 : 40)
+  if (!efficient) return trimmed
+  // Older turns keep enough detail for pronouns and references, without
+  // resending full code files from every earlier reply.
+  return trimmed.map((m, i) => {
+    if (i === trimmed.length - 1 || m.content.length <= 8000) return m
+    return { ...m, content: `${m.content.slice(0, 8000)}\n[earlier reply shortened for context]` }
+  })
+}
 
 function formatBytes(n: number): string {
   if (!n) return '0 B'
@@ -111,6 +134,9 @@ export function ChatView() {
   const [pending, setPending] = useState<Attachment[]>([])
   const [preparing, setPreparing] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
+  // State updates are async; this ref blocks a second send from a fast double
+  // click before `streaming` has had a chance to render.
+  const sendingRef = useRef(false)
   // Streaming text is committed in small batches. Updating the whole
   // conversation on every ~32-character delta made long replies stutter and
   // hammer localStorage; these refs keep the live text and the last commit.
@@ -214,7 +240,7 @@ export function ChatView() {
     }
   }
 
-  const send = async (
+  const sendInner = async (
     overrideText?: string,
     overrideAttachments?: Attachment[],
     historyOverride?: ChatMessage[],
@@ -327,7 +353,8 @@ export function ChatView() {
     // An explicit history is used by Regenerate: it contains the turns before
     // the regenerated prompt, so the old answer and prompt are not sent twice.
     const priorMessages = historyOverride ?? existing?.messages ?? []
-    const msgs = [...priorMessages, userMsg].map(m => ({ id: m.id, role: m.role, content: m.content, createdAt: m.createdAt }))
+    const fullMsgs = [...priorMessages, userMsg].map(m => ({ id: m.id, role: m.role, content: m.content, createdAt: m.createdAt }))
+    const requestMsgs = contextForRequest(fullMsgs, !!settings.efficientReplies)
 
     // Documents are folded into the prompt (bounded so long files can't
     // overflow the model context); images are sent as attachments for vision.
@@ -343,10 +370,18 @@ export function ChatView() {
         used += slice.length
         parts.push(`--- Attached file: ${d.name} ---\n${slice}`)
       }
-      const last = msgs[msgs.length - 1]
+      const last = requestMsgs[requestMsgs.length - 1]
       if (last && parts.length) last.content = `${last.content}\n\n${parts.join('\n\n')}`
     }
     const imageAttachments = cleanAttachments.filter(a => a.kind === 'image')
+    const backendIdentity = config.mode === 'backend' || imageAttachments.length > 0
+    const modeInstruction = MODE_INSTRUCTIONS[mode] || MODE_INSTRUCTIONS.general
+    const systemPrompt = backendIdentity
+      ? modeInstruction
+      : `${NEXUS_IDENTITY} ${modeInstruction}`
+    const generation = settings.efficientReplies
+      ? { ...settings.generation, maxTokens: Math.min(settings.generation.maxTokens, 1024) }
+      : settings.generation
 
     pushActivity(mode === 'coding' ? 'coding' : 'write')
     setStreaming(true)
@@ -360,13 +395,14 @@ export function ChatView() {
     let replyText = ''
     try {
       replyText = await adapter.chat(runtimeCfg, {
-        messages: msgs,
+        messages: requestMsgs,
         model,
-        settings: settings.generation,
-        systemPrompt: MODE_PROMPTS[mode],
+        settings: generation,
+        systemPrompt,
         signal: ac.signal,
         attachments: imageAttachments,
         fast: settings.fastReplies,
+        efficient: settings.efficientReplies,
         onChunk: (full) => {
           streamTextRef.current = full
           const now = Date.now()
@@ -421,7 +457,7 @@ export function ChatView() {
             void generateTitle(
               settings.backendUrl,
               token,
-              [...msgs.map(m => ({ role: m.role, content: m.content })), { role: 'assistant', content: replyText }],
+              [...requestMsgs.map(m => ({ role: m.role, content: m.content })), { role: 'assistant', content: replyText }],
             ).then(title => { if (title) rename(activeConv.id, title) })
           }
         }
@@ -429,6 +465,20 @@ export function ChatView() {
       setStreaming(false)
       setStreamingId(null)
       abortRef.current = null
+    }
+  }
+
+  const send = async (
+    overrideText?: string,
+    overrideAttachments?: Attachment[],
+    historyOverride?: ChatMessage[],
+  ) => {
+    if (sendingRef.current) return
+    sendingRef.current = true
+    try {
+      await sendInner(overrideText, overrideAttachments, historyOverride)
+    } finally {
+      sendingRef.current = false
     }
   }
 

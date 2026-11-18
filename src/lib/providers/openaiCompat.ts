@@ -125,6 +125,7 @@ async function chatViaBackend(cfg: RuntimeConfig, opts: ChatOptions): Promise<st
     systemPrompt: opts.systemPrompt,
     stream: opts.settings.stream,
     fast: opts.fast,
+    efficient: opts.efficient,
     attachments: (opts.attachments || []).map(a => ({
       kind: a.kind,
       fileId: a.fileId,
@@ -208,6 +209,6 @@ async function testViaBackend(cfg: RuntimeConfig): Promise<{ ok: boolean; messag
     const data = await res.json()
     return { ok: !!data?.ok, message: data?.message || (res.ok ? 'OK' : 'Failed') }
   } catch (e: any) {
-    return { ok: false, message: e?.message || 'Backend unreachable.' }
+    return { ok: false, message: e?.message || 'NEXUS Core is unreachable.' }
   }
 }

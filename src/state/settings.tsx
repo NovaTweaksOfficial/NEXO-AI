@@ -27,6 +27,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   soundEffects: true,
   saveHistory: true,
   fastReplies: false,
+  efficientReplies: true,
   funMode: true,
   companion: true,
 }
@@ -58,6 +59,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     if (typeof legacy.unlimitedReplies === 'boolean' && typeof legacy.fastReplies !== 'boolean') {
       merged.fastReplies = legacy.unlimitedReplies
     }
+    if (typeof merged.efficientReplies !== 'boolean') merged.efficientReplies = true
     return merged
   })
   useEffect(() => {

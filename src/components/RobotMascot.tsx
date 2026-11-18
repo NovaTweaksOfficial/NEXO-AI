@@ -89,12 +89,13 @@ export function RobotMascot({ size = 96, className = '', trackCursor = false, mo
   }, [reduce])
 
   const spring = { type: 'spring' as const, stiffness: 170, damping: 18 }
+  // Mood changes expression and intensity, but the palette stays violet/neutral.
   const accent = mood === 'excited'
-    ? '#f472b6'
+    ? '#c4b5fd'
     : mood === 'happy'
-      ? '#22d3ee'
+      ? '#a78bfa'
       : mood === 'focused'
-        ? '#60a5fa'
+        ? '#8b5cf6'
         : '#a78bfa'
   const smiling = mood === 'happy' || mood === 'excited'
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -128,18 +129,18 @@ export function RobotMascot({ size = 96, className = '', trackCursor = false, mo
       <svg viewBox="0 0 120 120" width={size} height={size} xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id={ids.metal} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#2a2a4a" />
-            <stop offset="50%" stopColor="#1a1a30" />
-            <stop offset="100%" stopColor="#0f0f1e" />
+            <stop offset="0%" stopColor="#272730" />
+            <stop offset="50%" stopColor="#1b1b22" />
+            <stop offset="100%" stopColor="#0f0f14" />
           </linearGradient>
           <linearGradient id={ids.metalHi} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#5a5a8a" />
-            <stop offset="100%" stopColor="#1a1a30" />
+            <stop offset="0%" stopColor="#4b4b5a" />
+            <stop offset="100%" stopColor="#1b1b22" />
           </linearGradient>
           <radialGradient id={ids.eyeGlow} cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor={accent} />
             <stop offset="60%" stopColor={accent} stopOpacity="0.75" />
-            <stop offset="100%" stopColor="#3b82f6" />
+            <stop offset="100%" stopColor="#6d28d9" />
           </radialGradient>
           <filter id={ids.glow} x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="3" result="b" />
@@ -208,8 +209,8 @@ export function RobotMascot({ size = 96, className = '', trackCursor = false, mo
           )}
 
           {/* side bolts */}
-          <circle cx="28" cy="60" r="3" fill="#3b82f6" filter={`url(#${ids.softGlow})`} />
-          <circle cx="92" cy="60" r="3" fill="#3b82f6" filter={`url(#${ids.softGlow})`} />
+          <circle cx="28" cy="60" r="3" fill="#a78bfa" filter={`url(#${ids.softGlow})`} />
+          <circle cx="92" cy="60" r="3" fill="#a78bfa" filter={`url(#${ids.softGlow})`} />
 
           {/* jaw */}
           <path d="M 30 94 Q 60 104 90 94" stroke="#8b5cf6" strokeWidth="1.5" fill="none" opacity="0.6" />

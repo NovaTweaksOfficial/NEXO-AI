@@ -1,19 +1,30 @@
 :root {
-  --bg: #080810;
-  --bg-2: #10101c;
-  --bg-3: #16162a;
-  --panel: rgba(20, 20, 36, 0.6);
-  --panel-solid: #141424;
-  --border: rgba(139, 92, 246, 0.18);
-  --border-strong: rgba(139, 92, 246, 0.35);
-  --purple: #8b5cf6;
-  --purple-2: #a78bfa;
-  --blue: #3b82f6;
-  --cyan: #22d3ee;
-  --pink: #ec4899;
-  --text: #f5f5fa;
-  --text-2: #a7a7c0;
-  --text-3: #6b6b8a;
+  /* Neutral foundation: cool graphite, not tinted by decorative hues. */
+  --bg: #09090c;
+  --bg-2: #111116;
+  --bg-3: #17171e;
+  --panel: rgba(22, 22, 28, 0.66);
+  --panel-solid: #16161c;
+  --surface-1: rgba(255, 255, 255, 0.04);
+  --surface-2: rgba(255, 255, 255, 0.07);
+  --track: rgba(255, 255, 255, 0.1);
+
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  /* Single brand accent: violet. Aliases keep existing --purple usage working. */
+  --accent: #8b5cf6;
+  --accent-2: #a78bfa;
+  --accent-soft: rgba(139, 92, 246, 0.12);
+  --accent-border: rgba(139, 92, 246, 0.35);
+  --purple: var(--accent);
+  --purple-2: var(--accent-2);
+
+  --text: #f5f5f7;
+  --text-2: #a5a5b2;
+  --text-3: #71717e;
+
+  /* Semantic status colors only. Never used for decoration. */
   --danger: #ef4444;
   --success: #22c55e;
   --warn: #f59e0b;
@@ -23,7 +34,7 @@
   --radius-lg: 22px;
 
   --shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
-  --glow: 0 0 24px rgba(139, 92, 246, 0.35);
+  --glow: 0 0 24px rgba(139, 92, 246, 0.22);
 
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -34,12 +45,21 @@
   --mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 
-[data-accent='blue'] { --purple: #3b82f6; --purple-2: #60a5fa; --glow: 0 0 24px rgba(59, 130, 246, 0.35); }
-[data-accent='cyan'] { --purple: #22d3ee; --purple-2: #67e8f9; --glow: 0 0 24px rgba(34, 211, 238, 0.35); }
-[data-accent='pink'] { --purple: #ec4899; --purple-2: #f472b6; --glow: 0 0 24px rgba(236, 72, 153, 0.35); }
-
-[data-theme='darker'] { --bg: #05050a; --bg-2: #0a0a14; }
-[data-theme='midnight'] { --bg: #0a0f1f; --bg-2: #101828; }
+/* Theme variants are neutral dark variations only. The brand accent is fixed. */
+[data-theme='darker'] {
+  --bg: #050505;
+  --bg-2: #0b0b0e;
+  --bg-3: #111116;
+  --panel: rgba(16, 16, 20, 0.7);
+  --panel-solid: #101014;
+}
+[data-theme='midnight'] {
+  --bg: #0b0b0e;
+  --bg-2: #121217;
+  --bg-3: #18181f;
+  --panel: rgba(24, 24, 31, 0.66);
+  --panel-solid: #18181f;
+}
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
