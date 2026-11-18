@@ -1412,13 +1412,11 @@ export default {
           { role: 'user', content: transcript },
         ]
         const settings: ChatSettings = { temperature: 0.2, maxTokens: 24, topP: 1, stream: false }
-        const key = apiKeyFor(env, 'pollinations')
-        const { base, model } = upstreamFor('pollinations', key, undefined, undefined)
         let title = ''
         try {
-          // One call only. The client keeps its local title if this is thin or
-          // unavailable; a second AI call was rarely worth the extra spend.
-          title = (await callChatUpstream(base, key, { model, messages: titleMessages, ...settings }))?.text || ''
+          // One call, using the server's always-available engine. The shared
+          // keyless text route is rate-limited and was returning empty titles.
+          title = (await runWorkersAI(env, titleMessages, settings, false)).text || ''
         } catch { /* best effort; the client already has a fallback title */ }
         const clean = String(title)
           .split('\n')[0]
